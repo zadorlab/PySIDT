@@ -1,0 +1,2 @@
+# PySIDT
+This repository contains PySIDT a low-data machine learning algorithm for predicting chemical properties. PySIDT is a general implementation of the subgraph isomorphic tree generation (SIDT) machine learning algorithm developed in <a href="https://chemrxiv.org/engage/chemrxiv/article-details/62c5c941c79aca239053967e">Johnson and Green 2021</a>. While the algorithm in that work was specific to rate coefficients this implementation can be applied to prediction of arbitrary properties. 
