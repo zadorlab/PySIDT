@@ -62,7 +62,7 @@ class SubgraphIsomorphicDecisionTree:
         Picks a node to expand
         """
         for name,node in self.nodes.items():
-            if len(node.items) > 1: 
+            if len(node.items) > 1 and not (node.name in self.skip_nodes): 
                 logging.info("Selected node {}".format(node.name))
                 logging.info("Node has {} items".format(len(node.items)))
                 return node
@@ -111,7 +111,9 @@ class SubgraphIsomorphicDecisionTree:
         """
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
-        assert len(extlist) > 0
+        if len(extlist) == 0:
+            self.skip_nodes.append(parent.name)
+            return
         ext = self.choose_extension(parent,extlist)
         new,comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
@@ -170,6 +172,7 @@ class SubgraphIsomorphicDecisionTree:
         """
         generate nodes for the tree based on the supplied data
         """
+        self.skip_nodes = []
         if data:
             if check_data:
                 for datum in data:
