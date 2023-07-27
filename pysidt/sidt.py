@@ -69,17 +69,23 @@ class SubgraphIsomorphicDecisionTree:
         else:
             return None
     
-    def generate_extensions(self,node):
+    def generate_extensions(self,node,recursing=False):
         """
         Generates set of extension groups to a node
         returns list of Groups
         design not to subclass
         """
-        out, gave_up_split = get_extension_edge(node, self.n_splits, iter_max=np.inf, iter_item_cap=np.inf)
-        logging.info("Generated extensions:")
-        logging.info(len(out))
-        logging.info(gave_up_split)
-        logging.info([x.mol.to_adjacency_list() for x in node.items])
+        out, gave_up_split = get_extension_edge(node, self.n_splits, r=self.r, r_bonds=self.r_bonds, r_un=self.r_un,
+                                                iter_max=np.inf, iter_item_cap=np.inf)
+        logging.error("Generated extensions:")
+        logging.error(len(out))
+        logging.error(gave_up_split)
+        if len(out) == 0 and not recursing:
+            logging.error("recursing")
+            node.group.clear_reg_dims()
+            return self.generate_extensions(node,recursing=True)
+            
+        #logging.error([x.mol.to_adjacency_list() for x in node.items])
         return out #[(grp2, grpc, name, typ, indc)]
     
     def choose_extension(self,node,exts):
