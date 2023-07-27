@@ -38,8 +38,8 @@ class SubgraphIsomorphicDecisionTree:
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
-            while node.parents:
-                node = node.parents
+            while node.parent:
+                node = node.parent
             self.root = node 
         elif root_group:
             self.root = Node(root_group,name="Root")
@@ -51,8 +51,8 @@ class SubgraphIsomorphicDecisionTree:
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
-            while node.parents:
-                node = node.parents
+            while node.parent:
+                node = node.parent
             self.root = node 
         else:
             self.root = None
