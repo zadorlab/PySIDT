@@ -24,7 +24,7 @@ def split_mols(data, newgrp):
 
     return new, comp
     
-def get_extension_edge(parent, n_splits, iter_max=np.inf, iter_item_cap=np.inf):
+def get_extension_edge(parent, n_splits, iter_max=np.inf, iter_item_cap=np.inf, r=None, r_bonds=[1,2,3,1.5,4], r_un=[0,1,2,3]):
     """
     finds the set of all extension groups to parent such that
     1) the extension group divides the set of reactions under parent
@@ -51,7 +51,7 @@ def get_extension_edge(parent, n_splits, iter_max=np.inf, iter_item_cap=np.inf):
     while grps[iter] != []:
         grp = grps[iter][-1]
 
-        exts = grp.get_extensions(basename=names[-1], n_splits=n_splits)
+        exts = grp.get_extensions(basename=names[-1], r=r, r_bonds=r_bonds, r_un=r_un, n_splits=n_splits)
 
         reg_dict = dict()
         ext_inds = []
