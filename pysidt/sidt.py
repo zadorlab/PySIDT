@@ -25,11 +25,16 @@ class Datum:
 
 class SubgraphIsomorphicDecisionTree:
     
-    def __init__(self,root_group=None,nodes=dict(),n_splits=1,iter_max=2,iter_item_cap=100):
+    def __init__(self,root_group=None,nodes=dict(),n_splits=1,iter_max=2,iter_item_cap=100, 
+                 r=None, r_bonds=[1,2,3,1.5,4], r_un=[0,1,2,3]):
         self.nodes = nodes
         self.n_splits = n_splits 
         self.iter_max = iter_max 
         self.iter_item_cap = iter_item_cap
+        self.r = r 
+        self.r_bonds = r_bonds 
+        self.r_un = r_un
+        self.skip_nodes = []
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
