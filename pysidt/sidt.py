@@ -222,3 +222,37 @@ class SubgraphIsomorphicDecisionTree:
                 return node.rule
         
         return node.rule
+
+def write_nodes(tree,file):
+    nodesdict = dict()
+    for node in sidt.nodes.values():
+        if node.parent is None:
+            p = None
+        else:
+            p = node.parent.name
+        nodesdict[node.name] = {"group": node.group.to_adjacency_list(),
+                       "rule": node.rule,
+                       "parent": p,
+                       "children": [x.name for x in node.children],
+                       "name": node.name}
+
+    with open(file,'w') as f:
+        json.dump(nodesdict,f)
+
+def read_nodes(file):
+    with open(file,'r') as f:
+        nodesdict = json.load(f)
+    nodes = dict()
+    for n,d in nodesdict.items():
+        nodes[n] = Node(group=Group().from_adjacency_list(d["group"]),
+                        rule=d["rule"],
+                        parent=d["parent"],
+                        children = d["children"],
+                        name = d["name"])
+
+    for n,node in nodes.items():
+        if node.parent:
+            node.parent = nodes[node.parent]
+        node.children = [nodes[child] for child in node.children]
+    
+    return nodes
