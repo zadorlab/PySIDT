@@ -1,7 +1,8 @@
 from molecule.molecule import Molecule, Group
 from pysidt.extensions import split_mols,get_extension_edge
 import numpy as np
-import logging 
+import logging
+import json
 
 class Node:
     
