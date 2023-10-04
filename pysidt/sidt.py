@@ -27,7 +27,7 @@ class Datum:
 class SubgraphIsomorphicDecisionTree:
     
     def __init__(self,root_group=None,nodes=dict(),n_splits=1,iter_max=2,iter_item_cap=100, 
-                 r=None, r_bonds=[1,2,3,1.5,4], r_un=[0,1,2,3]):
+                 r=None, r_bonds=[1,2,3,1.5,4], r_un=[0,1,2,3],r_site=[],r_morph=[]):
         self.nodes = nodes
         self.n_splits = n_splits 
         self.iter_max = iter_max 
@@ -35,6 +35,8 @@ class SubgraphIsomorphicDecisionTree:
         self.r = r 
         self.r_bonds = r_bonds 
         self.r_un = r_un
+        self.r_site = r_site 
+        self.r_morph = r_morph
         self.skip_nodes = []
         
         if len(nodes) > 0:
@@ -77,7 +79,8 @@ class SubgraphIsomorphicDecisionTree:
         design not to subclass
         """
         out, gave_up_split = get_extension_edge(node, self.n_splits, r=self.r, r_bonds=self.r_bonds, r_un=self.r_un,
-                                                iter_max=np.inf, iter_item_cap=np.inf)
+                                                r_site=self.r_site, r_morph=self.r_morph,
+                                                iter_max=self.iter_max, iter_item_cap=self.iter_item_cap)
         logging.error("Generated extensions:")
         logging.error(len(out))
         logging.error(gave_up_split)
