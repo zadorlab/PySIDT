@@ -422,3 +422,60 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 
         self.root.items = out
         
+        
+    def generate_tree(self,data=None,check_data=True,test=None,max_nodes=None,
+                      regularize_based_on_test=True):
+        """
+        generate nodes for the tree based on the supplied data
+        """
+        self.setup_data(data,check_data=check_data)
+        self.test_mae_kcal = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+        
+        if test:
+            self.test = test
+        
+        while True:
+            self.fit_tree()
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            num = int(max(1,np.round(self.fract_nodes_expand_per_iter*len(self.nodes))))
+            nodes = self.select_nodes(num=num)
+            if nodes == []:
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
+        
+        if self.test and regularize_based_on_test:
+            logging.error("Regularizing based on best test error")
+            nodes_to_remove = []
+            for k in list(self.nodes.keys()):
+                if k not in self.best_tree_nodes:
+                    nodes_to_remove.append(k)
+            
+            node_back_mapping = dict()
+            for k in nodes_to_remove:
+                parent = self.nodes[k]
+                while parent.name in nodes_to_remove:
+                    parent = parent.parent
+                node_back_mapping[self.nodes[k]] = parent
+                parent.items.extend(self.nodes[k].items)
+                del self.nodes[k]
+            
+            for k,datum in enumerate(self.datums):
+                for i,n in enumerate(self.mol_node_maps[datum]["nodes"]):
+                    if n in node_back_mapping.keys():
+                        self.mol_node_maps[datum]["nodes"][i] = node_back_mapping[n]
+            
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
+                
+            self.fit_tree(data=None,check_data=False)
