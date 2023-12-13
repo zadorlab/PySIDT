@@ -479,3 +479,63 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     node.children.remove(child)
                 
             self.fit_tree(data=None,check_data=False)
+
+        
+    def fit_tree(self,data=None,check_data=True,alpha=0.1):
+        """
+        fit rule for each node
+        """
+        if data:
+            self.setup_data(data,check_data=check_data)
+            self.descend_training_from_top(only_specific_match=True)
+        
+        #generate matrix
+        A = sp.csc_matrix((len(self.datums),len(self.nodes)))
+        y = np.array([datum.value for datum in self.datums])
+
+        nodes = list(self.nodes.values())
+        for i,datum in enumerate(self.datums):
+            for node in self.mol_node_maps[datum]["nodes"]:
+                while node is not None:
+                    try:
+                        j = nodes.index(node)
+                    except Exception as e:
+                        logging.error(node.name)
+                        raise e
+                    A[i,j] += 1.0
+                    node = node.parent
+
+        clf = linear_model.Lasso(alpha=0.1,fit_intercept=False,tol=1e-4,max_iter=1000000000,selection='random')
+ 
+        pred = clf.fit(A, y)
+        self.data_delta = A*clf.coef_ - y
+
+        if A.shape[1] != 1:
+            node_uncertainties = np.diag(np.linalg.pinv((A.T @ A).toarray())) #* (self.data_delta**2).sum() / (len(self.datums) - len(self.nodes))
+            self.node_uncertainties = {node.name: node_uncertainties[i] for i,node in enumerate(nodes)}
+        else:
+            self.node_uncertainties = {node.name: 1.0 for i,node in enumerate(nodes)}
+        
+        for i,val in enumerate(clf.coef_):
+            nodes[i].rule = val
+        
+        train_error = [self.evaluate(d.mol) - d.value for d in self.datums]
+        
+        logging.error("training MAE: {} kcal/mol".format(np.mean(np.abs(np.array(train_error)))/4184.0))
+        
+        if self.test:
+            train_mae = np.mean(np.abs(np.array(train_error)))
+            test_error = [self.evaluate(d.mol) - d.value for d in self.test]
+            test_mae = np.mean(np.abs(np.array(test_error)))
+            max_mae = max(test_mae,train_mae)
+            if max_mae < self.min_test_error:
+                self.min_test_error = max_mae
+                self.best_tree_nodes = list(self.nodes.keys())
+                self.check_mol_node_maps()
+                self.bestA = A
+                self.best_nodes = {k : v for k,v in self.nodes.items()}
+                self.best_mol_node_maps = {k:{"mols" : v["mols"][:], "nodes": v["nodes"][:]} for k,v in self.mol_node_maps.items()}
+            self.test_mae_kcal = test_mae/4184.0
+            logging.error("test MAE: {} kcal/mol".format(self.test_mae_kcal))
+        
+        logging.error("# nodes: {}".format(len(self.nodes)))
