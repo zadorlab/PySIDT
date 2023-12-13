@@ -539,3 +539,53 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             logging.error("test MAE: {} kcal/mol".format(self.test_mae_kcal))
         
         logging.error("# nodes: {}".format(len(self.nodes)))
+        
+    def evaluate(self,mol):
+        """
+        Evaluate tree for a given possibly labeled mol
+        """
+        out = 0.0
+        decomp = self.decomposition(mol)
+        for d in decomp:
+            children = self.root.children
+            node = self.root
+            out += node.rule
+            boo = True
+            while boo:
+                for child in children:
+                    if d.is_subgraph_isomorphic(child.group, generate_initial_map=True, save_order=True):
+                        children = child.children 
+                        node = child
+                        out += node.rule
+                        break
+                else:
+                    boo = False
+        
+        return out
+            
+    def descend_node(self,node,only_specific_match=True):
+        data_to_add = {child: [] for child in node.children}
+        for m in node.items:
+            for child in node.children:
+                if m.is_subgraph_isomorphic(child.group, generate_initial_map=True, save_order=True):
+                    data_to_add[child].append(m)
+                    break
+            
+        for k,datum in enumerate(self.datums):
+            for i,d in enumerate(self.mol_node_maps[datum]["mols"]):
+                for child in node.children:
+                    if any(d is x for x in data_to_add[child]):
+                        self.mol_node_maps[datum]["nodes"][i] = child
+
+        for child in node.children:
+            for m in data_to_add[child]:
+                child.items.append(m)
+                if only_specific_match:
+                    node.items.remove(m)
+    
+    def regularize(self,data=None,check_data=True):
+        if data:
+            self.setup_data(data,check_data=check_data)
+            self.descend_training_from_top(only_specific_match=False)
+        
+        simple_regularization(self.nodes["Root"],self.r,self.r_bonds,self.r_un,self.r_site,self.r_morph)
