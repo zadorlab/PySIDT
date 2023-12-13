@@ -293,3 +293,92 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             return nodes
         else:
             return list(self.nodes.values())
+    
+    def extend_tree_from_node(self,parent):
+        """
+        Adds a new node to the tree 
+        """
+        exts = self.generate_extensions(parent)
+        extlist = [ext[0] for ext in exts]
+        if len(extlist) == 0:
+            self.skip_nodes.append(parent.name)
+            return
+        ext = self.choose_extension(parent,extlist)
+        if ext is None:
+            self.skip_nodes.append(parent.name)
+            return
+        new,comp = split_mols(parent.items, ext)
+        ind = extlist.index(ext)
+        grp,grpc,name,typ,indc = exts[ind]
+        #logging.info("Choose extension {}".format(name))
+        
+        node = Node(group=grp,items=new,rule=None,parent=parent,children=[],name=name)
+        
+        assert not (name in self.nodes.keys()), name
+        
+        self.nodes[name] = node
+        parent.children.append(node)
+        self.node_uncertainties[name] = self.node_uncertainties[parent.name]
+        self.new_nodes.append(name)
+        
+        for k,datum in enumerate(self.datums):
+            for i,d in enumerate(self.mol_node_maps[datum]["mols"]):
+                if any(d is x for x in new):
+                    assert d.is_subgraph_isomorphic(node.group, generate_initial_map=True, save_order=True)
+                    self.mol_node_maps[datum]["nodes"][i] = node
+        
+        print("adding node {}".format(name))
+        
+        if grpc:
+            frags = name.split('_')
+            frags[-1] = 'N-' + frags[-1]
+            cextname = ''
+            for k in frags:
+                cextname += k
+                cextname += '_'
+            cextname = cextname[:-1]
+            nodec = Node(group=grpc,items=comp,rule=None,parent=parent,children=[],name=cextname)
+            
+            self.nodes[cextname] = nodec
+            parent.children.append(nodec)
+            self.node_uncertainties[cextname] = self.node_uncertainties[parent.name]
+            self.new_nodes.append(cextname)
+            
+            for k,datum in enumerate(self.datums):
+                for i,d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if any(d is x for x in comp):
+                        assert d.is_subgraph_isomorphic(nodec.group, generate_initial_map=True, save_order=True)
+                        self.mol_node_maps[datum]["nodes"][i] = nodec   
+            
+            parent.items = []
+        else:
+            parent.items = comp    
+        
+    def choose_extension(self,node,exts):
+        """
+        select best extension among the set of extensions
+        returns a Node object
+        almost always subclassed
+        """
+        maxval = 0.0
+        maxext = None
+        for ext in exts:
+            new,comp = split_mols(node.items, ext)
+            newval = 0.0
+            compval = 0.0
+            for i,datum in enumerate(self.datums):
+                dy = self.data_delta[i]/len(self.mol_node_maps[datum]["mols"])
+                for j,d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    v = self.node_uncertainties[self.mol_node_maps[datum]["nodes"][j].name]
+                    s = sum(self.node_uncertainties[self.mol_node_maps[datum]["nodes"][k].name] for k in range(len(self.mol_node_maps[datum]["nodes"])))
+                    if any(d is x for x in new):
+                        newval += self.data_delta[i]*v/s
+                    elif any(d is x for x in comp):
+                        compval += self.data_delta[i]*v/s
+            val = abs(newval - compval)
+            if val > maxval:
+                maxval = val 
+                maxext = ext 
+        
+        return maxext
+    
