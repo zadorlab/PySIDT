@@ -229,7 +229,7 @@ class SubgraphIsomorphicDecisionTree:
 
 def write_nodes(tree,file):
     nodesdict = dict()
-    for node in sidt.nodes.values():
+    for node in tree.nodes.values():
         if node.parent is None:
             p = None
         else:
