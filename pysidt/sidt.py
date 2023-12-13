@@ -382,3 +382,43 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         
         return maxext
     
+    def check_mol_node_maps(self):
+        for d,v in self.mol_node_maps.items():
+            for i,m in enumerate(v["mols"]):
+                nv = self.nodes["Root"]
+                assert m.is_subgraph_isomorphic(nv.group, generate_initial_map=True, save_order=True)
+                children = nv.children
+                boo = True
+                while boo:
+                    for child in children:
+                        if m.is_subgraph_isomorphic(child.group, generate_initial_map=True, save_order=True):
+                            children = child.children 
+                            nv = child
+                            break
+                    else:
+                        boo = False
+                assert nv == v["nodes"][i]
+        
+    def setup_data(self,data,check_data=False):
+        self.datums = data
+        self.mol_node_maps = dict()
+        for datum in self.datums:
+            decomp = self.decomposition(datum.mol)
+            self.mol_node_maps[datum]= {"mols": decomp, "nodes": [self.root for d in decomp]}
+        
+        if check_data:
+            for i,datum in enumerate(self.datums):
+                for d in self.mol_node_maps[datum]["mols"]:
+                    if not d.is_subgraph_isomorphic(self.root.group, generate_initial_map=True, save_order=True):
+                        logging.error("Datum Submol did not match Root node:")
+                        logging.error(d.to_adjacency_list())
+                        raise ValueError
+                        
+        self.clear_data()
+        out = []
+        for datum in self.datums:
+            for d in self.mol_node_maps[datum]["mols"]:
+                out.append(d)
+                
+        self.root.items = out
+        
