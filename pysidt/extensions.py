@@ -17,12 +17,18 @@ def split_mols(data, newgrp):
     new = []
     comp = []
     
-    for i,datum in enumerate(data):
-        if datum.mol.is_subgraph_isomorphic(newgrp, generate_initial_map=True, save_order=True):
-            new.append(datum)
-        else:
-            comp.append(datum)
-
+    if isinstance(data[0],Molecule):
+        for i,mol in enumerate(data):
+            if mol.is_subgraph_isomorphic(newgrp, generate_initial_map=True, save_order=True):
+                new.append(mol)
+            else:
+                comp.append(mol)
+    else:
+        for i,datum in enumerate(data):
+            if datum.mol.is_subgraph_isomorphic(newgrp, generate_initial_map=True, save_order=True):
+                new.append(datum)
+            else:
+                comp.append(datum)
 
     return new, comp
     
@@ -212,7 +218,7 @@ def get_extension_edge(parent, n_splits, iter_max=np.inf, iter_item_cap=np.inf, 
         if first_time:
             first_time = False
 
-        if grps[iter] == [] and len(grps) != iter+1 and (not (any([len(x)>0 for x in out_exts]) and iter+1 > iter_max)):
+        if grps[iter] == [] and len(grps) != iter+1 and (not (any([len(x)>0 for x in out_exts]))):
             iter += 1
             if len(grps[iter]) > iter_item_cap:
                 logging.error("Recursion item cap hit not splitting {0} reactions at iter {1} with {2} items".format(len(parent.items),iter,len(grps[iter])))
@@ -246,13 +252,28 @@ def get_extensions(grp, r=None, r_bonds=[1,2,3,1.5,4], r_un=[0,1,2,3], r_site=[]
     if r is None:
         r = elements.bde_elements  # set of possible r elements/atoms
         r = [ATOMTYPES[x] for x in r]
-        
-    RxnH = r[:]
-    RxnH.remove(ATOMTYPES['H'])
-    R = r[:]
-    R.remove(ATOMTYPES['X'])
-    RnH = R[:]
-    RnH.remove(ATOMTYPES['H'])
+    
+    if ATOMTYPES['X'] in r and ATOMTYPES['H'] in r:
+        RxnH = r[:]
+        RxnH.remove(ATOMTYPES['H'])
+        R = r[:]
+        R.remove(ATOMTYPES['X'])
+        RnH = R[:]
+        RnH.remove(ATOMTYPES['H'])
+    elif ATOMTYPES['H'] in r:
+        R = r[:]
+        RnH = R[:]
+        RnH.remove(ATOMTYPES['H'])
+        RxnH = R[:]
+    elif ATOMTYPES['X'] in r:
+        RxnH = r[:]
+        R = r[:]
+        R.remove(ATOMTYPES['X'])
+        RnH = R[:]
+    else:
+        R = r[:]
+        RnH = r[:]
+        RxnH = r[:]
 
     atoms = grp.atoms
     if atm_ind is None:
