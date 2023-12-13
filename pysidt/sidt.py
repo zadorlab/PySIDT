@@ -78,14 +78,16 @@ class SubgraphIsomorphicDecisionTree:
         returns list of Groups
         design not to subclass
         """
+
         out, gave_up_split = get_extension_edge(node, self.n_splits, r=self.r, r_bonds=self.r_bonds, r_un=self.r_un,
                                                 r_site=self.r_site, r_morph=self.r_morph,
                                                 iter_max=self.iter_max, iter_item_cap=self.iter_item_cap)
-        logging.error("Generated extensions:")
-        logging.error(len(out))
-        logging.error(gave_up_split)
+        
         if len(out) == 0 and not recursing:
             logging.error("recursing")
+            logging.error(node.group.to_adjacency_list())
+            # for item in node.items:
+            #     logging.error(item.to_adjacency_list())
             node.group.clear_reg_dims()
             return self.generate_extensions(node,recursing=True)
             
