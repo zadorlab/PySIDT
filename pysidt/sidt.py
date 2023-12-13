@@ -281,3 +281,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.best_tree_nodes = None
         self.min_test_error = np.inf
     
+    def select_nodes(self,num=1):
+        """
+        Picks the nodes with the largest magintude rule values
+        """
+        if len(self.nodes) > num:
+            rulevals = [self.node_uncertainties[node.name] if len(node.items) > 1 and not (node.name in self.new_nodes) and not (node.name in self.skip_nodes) else 0.0 for node in self.nodes.values()]
+            inds = np.argsort(rulevals)
+            maxinds = inds[-num:]
+            nodes = [node for i,node in enumerate(self.nodes.values()) if i in maxinds and len(node.items) > 1]
+            return nodes
+        else:
+            return list(self.nodes.values())
