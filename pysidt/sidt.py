@@ -262,3 +262,22 @@ def read_nodes(file):
         node.children = [nodes[child] for child in node.children]
     
     return nodes
+
+class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
+    def __init__(self,decomposition,root_group=None,nodes=dict(),n_splits=1,iter_max=2,iter_item_cap=100, 
+                 fract_nodes_expand_per_iter=0,
+                 r=None, r_bonds=[1,2,3,1.5,4], r_un=[0,1,2,3],r_site=[],r_morph=[]):
+        
+        super().__init__(root_group=root_group,nodes=nodes,n_splits=n_splits,
+                         iter_max=iter_max,iter_item_cap=iter_item_cap, 
+                 r=r, r_bonds=r_bonds, r_un=r_un,r_site=r_site,r_morph=r_morph)
+        
+        self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
+        self.decomposition = decomposition
+        self.mol_submol_node_maps = None
+        self.data_delta = None
+        self.datums = None
+        self.test = None
+        self.best_tree_nodes = None
+        self.min_test_error = np.inf
+    
