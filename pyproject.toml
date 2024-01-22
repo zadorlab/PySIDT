@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "PySIDT"
+version = "0.0.1"
+authors = [
+  { name="Matthew S. Johnson", email="mjohnson541@gmail.com" },
+  { name="Judit Zador", email="jzador@sandia.gov" },
+]
+description = "A low-data machine learning algorithm for predicting chemical properties"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.7"
+
+[tool.setuptools]
+packages = ["pysidt"]
+
+[project.urls]
+Homepage = "https://github.com/zadorlab/PySIDT"
+Issues = "https://github.com/zadorlab/PySIDT/issues"
+
