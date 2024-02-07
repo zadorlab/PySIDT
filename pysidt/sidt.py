@@ -664,9 +664,11 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.data_delta = A * clf.coef_ - y
 
         if A.shape[1] != 1:
-            node_uncertainties = np.diag(
-                np.linalg.pinv((A.T @ A).toarray())
-            )  # * (self.data_delta**2).sum() / (len(self.datums) - len(self.nodes))
+            node_uncertainties = (
+                np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                * (self.data_delta**2).sum()
+                / (len(self.datums) - len(self.nodes))
+            )
             self.node_uncertainties = {
                 node.name: node_uncertainties[i] for i, node in enumerate(nodes)
             }
