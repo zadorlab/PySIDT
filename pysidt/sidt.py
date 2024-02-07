@@ -135,8 +135,8 @@ class SubgraphIsomorphicDecisionTree:
         )
 
         if not out and not recursing:
-            logging.error("recursing")
-            logging.error(node.group.to_adjacency_list())
+            logging.info("recursing")
+            logging.info(node.group.to_adjacency_list())
             # for item in node.items:
             #     logging.error(item.to_adjacency_list())
             node.group.clear_reg_dims()
@@ -249,8 +249,8 @@ class SubgraphIsomorphicDecisionTree:
                     if not datum.mol.is_subgraph_isomorphic(
                         self.root.group, generate_initial_map=True, save_order=True
                     ):
-                        logging.error("Datum did not match Root node:")
-                        logging.error(datum.mol.to_adjacency_list())
+                        logging.info("Datum did not match Root node:")
+                        logging.info(datum.mol.to_adjacency_list())
                         raise ValueError
 
             self.clear_data()
@@ -273,7 +273,7 @@ class SubgraphIsomorphicDecisionTree:
 
         for node in self.nodes.values():
             if not node.items:
-                logging.error(node.name)
+                logging.info(node.name)
                 raise ValueError
             node.rule = sum([d.value for d in node.items]) / len(node.items)
 
@@ -545,8 +545,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     if not d.is_subgraph_isomorphic(
                         self.root.group, generate_initial_map=True, save_order=True
                     ):
-                        logging.error("Datum Submol did not match Root node:")
-                        logging.error(d.to_adjacency_list())
+                        logging.info("Datum Submol did not match Root node:")
+                        logging.info(d.to_adjacency_list())
                         raise ValueError
 
         self.clear_data()
@@ -641,7 +641,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     try:
                         j = nodes.index(node)
                     except Exception as e:
-                        logging.error(node.name)
+                        logging.info(node.name)
                         raise e
                     A[i, j] += 1.0
                     node = node.parent
@@ -672,11 +672,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         train_error = [self.evaluate(d.mol) - d.value for d in self.datums]
 
-        logging.error(
-            "training MAE: {} kcal/mol".format(
-                np.mean(np.abs(np.array(train_error))) / 4184.0
-            )
-        )
+        logging.info("training MAE: {}".format(np.mean(np.abs(np.array(train_error)))))
 
         if self.test:
             train_mae = np.mean(np.abs(np.array(train_error)))
@@ -696,7 +692,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.test_mae_kcal = test_mae / 4184.0
             logging.error("test MAE: {} kcal/mol".format(self.test_mae_kcal))
 
-        logging.error("# nodes: {}".format(len(self.nodes)))
+        logging.info("# nodes: {}".format(len(self.nodes)))
 
     def evaluate(self, mol):
         """
