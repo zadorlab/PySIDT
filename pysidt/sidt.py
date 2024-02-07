@@ -9,6 +9,8 @@ import json
 from sklearn import linear_model
 import scipy.sparse as sp
 
+logging.basicConfig(level=logging.INFO)
+
 
 class Node:
     def __init__(
