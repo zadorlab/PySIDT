@@ -14,8 +14,13 @@ logging.basicConfig(level=logging.INFO)
 
 class Node:
     def __init__(
-        self, group=None, items=[], rule=None, parent=None, children=[], name=None
+        self, group=None, items=None, rule=None, parent=None, children=None, name=None
     ):
+        if items is None:
+            items = []
+        if children is None:
+            children = []
+
         self.group = group
         self.items = items  # list of Datum objects
         self.rule = rule
@@ -40,16 +45,27 @@ class SubgraphIsomorphicDecisionTree:
     def __init__(
         self,
         root_group=None,
-        nodes=dict(),
+        nodes=None,
         n_splits=1,
         iter_max=2,
         iter_item_cap=100,
         r=None,
-        r_bonds=[1, 2, 3, 1.5, 4],
-        r_un=[0, 1, 2, 3],
-        r_site=[],
-        r_morph=[],
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
     ):
+        if nodes is None:
+            nodes = {}
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+
         self.nodes = nodes
         self.n_splits = n_splits
         self.iter_max = iter_max
@@ -321,16 +337,16 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self,
         decomposition,
         root_group=None,
-        nodes=dict(),
+        nodes=None,
         n_splits=1,
         iter_max=2,
         iter_item_cap=100,
         fract_nodes_expand_per_iter=0,
         r=None,
-        r_bonds=[1, 2, 3, 1.5, 4],
-        r_un=[0, 1, 2, 3],
-        r_site=[],
-        r_morph=[],
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
     ):
         super().__init__(
             root_group=root_group,
