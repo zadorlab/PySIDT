@@ -142,7 +142,6 @@ class SubgraphIsomorphicDecisionTree:
             node.group.clear_reg_dims()
             return self.generate_extensions(node, recursing=True)
 
-        # logging.error([x.mol.to_adjacency_list() for x in node.items])
         return out  # [(grp2, grpc, name, typ, indc)]
 
     def choose_extension(self, node, exts):
@@ -416,7 +415,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         new, comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
-        # logging.info("Choose extension {}".format(name))
 
         node = Node(
             group=grp, items=new, rule=None, parent=parent, children=[], name=name
