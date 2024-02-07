@@ -562,6 +562,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         validation_set=None,
         max_nodes=None,
         postpruning_based_on_val=True,
+        alpha=0.1,
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -574,7 +575,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.validation_set = validation_set
 
         while True:
-            self.fit_tree()
+            self.fit_tree(alpha=alpha)
             if len(self.nodes) > max_nodes:
                 break
             self.new_nodes = []
@@ -617,7 +618,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 for child in children_to_remove:
                     node.children.remove(child)
 
-            self.fit_tree(data=None, check_data=False)
+            self.fit_tree(data=None, check_data=False, alpha=alpha)
 
     def fit_tree(self, data=None, check_data=True, alpha=0.1):
         """
@@ -644,7 +645,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     node = node.parent
 
         clf = linear_model.Lasso(
-            alpha=0.1,
+            alpha=alpha,
             fit_intercept=False,
             tol=1e-4,
             max_iter=1000000000,
