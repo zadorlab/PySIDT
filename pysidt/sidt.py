@@ -28,6 +28,9 @@ class Node:
         self.children = children
         self.name = name
 
+    def __repr__(self) -> str:
+        return f"{self.name} {self.rule}"
+
 
 class Datum:
     """
@@ -39,6 +42,9 @@ class Datum:
     def __init__(self, mol, value):
         self.mol = mol
         self.value = value
+
+    def __repr__(self) -> str:
+        return f"{self.mol.smiles} {self.value}"
 
 
 class SubgraphIsomorphicDecisionTree:
