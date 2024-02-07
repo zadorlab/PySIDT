@@ -566,6 +566,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     ):
         """
         generate nodes for the tree based on the supplied data
+
+        Args:
+            `data`: list of Datum objects to train the tree
+            `check_data`: if True, check that the data is subgraph isomorphic to the root group
+            `validation_set`: list of Datum objects to validate the tree
+            `max_nodes`: maximum number of nodes to generate
+            `postpruning_based_on_val`: if True, regularize the tree based on the validation set
+            `alpha`: regularization parameter for Lasso regression
         """
         self.setup_data(data, check_data=check_data)
         self.val_mae = np.inf
