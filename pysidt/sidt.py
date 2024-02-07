@@ -134,7 +134,7 @@ class SubgraphIsomorphicDecisionTree:
             iter_item_cap=self.iter_item_cap,
         )
 
-        if len(out) == 0 and not recursing:
+        if not out and not recursing:
             logging.error("recursing")
             logging.error(node.group.to_adjacency_list())
             # for item in node.items:
@@ -170,7 +170,7 @@ class SubgraphIsomorphicDecisionTree:
         """
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
-        if len(extlist) == 0:
+        if not extlist:
             self.skip_nodes.append(parent.name)
             return
         ext = self.choose_extension(parent, extlist)
@@ -272,7 +272,7 @@ class SubgraphIsomorphicDecisionTree:
             self.descend_training_from_top(only_specific_match=False)
 
         for node in self.nodes.values():
-            if len(node.items) == 0:
+            if not node.items:
                 logging.error(node.name)
                 raise ValueError
             node.rule = sum([d.value for d in node.items]) / len(node.items)
@@ -406,7 +406,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         """
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
-        if len(extlist) == 0:
+        if not extlist:
             self.skip_nodes.append(parent.name)
             return
         ext = self.choose_extension(parent, extlist)
@@ -585,7 +585,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
             )
             nodes = self.select_nodes(num=num)
-            if nodes == []:
+            if not nodes:
                 break
             else:
                 for node in nodes:
