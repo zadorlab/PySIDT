@@ -1,4 +1,4 @@
-from molecule.molecule import Molecule, Group
+from molecule.molecule import Group
 from pysidt.extensions import split_mols, get_extension_edge
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
