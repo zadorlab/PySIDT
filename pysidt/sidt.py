@@ -371,9 +371,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.mol_submol_node_maps = None
         self.data_delta = None
         self.datums = None
-        self.test = None
+        self.validation_set = None
         self.best_tree_nodes = None
-        self.min_test_error = np.inf
+        self.min_val_error = np.inf
 
     def select_nodes(self, num=1):
         """
@@ -559,20 +559,19 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self,
         data=None,
         check_data=True,
-        test=None,
+        validation_set=None,
         max_nodes=None,
-        regularize_based_on_test=True,
+        postpruning_based_on_val=True,
     ):
         """
         generate nodes for the tree based on the supplied data
         """
         self.setup_data(data, check_data=check_data)
-        self.test_mae_kcal = np.inf
+        self.val_mae = np.inf
         self.skip_nodes = []
         self.new_nodes = []
 
-        if test:
-            self.test = test
+        self.validation_set = validation_set
 
         while True:
             self.fit_tree()
@@ -589,8 +588,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 for node in nodes:
                     self.extend_tree_from_node(node)
 
-        if self.test and regularize_based_on_test:
-            logging.error("Regularizing based on best test error")
+        if self.validation_set and postpruning_based_on_val:
+            logging.info("Postpruning based on best validation error")
             nodes_to_remove = []
             for k in list(self.nodes.keys()):
                 if k not in self.best_tree_nodes:
@@ -672,13 +671,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         logging.info("training MAE: {}".format(np.mean(np.abs(np.array(train_error)))))
 
-        if self.test:
+        if self.validation_set:
             train_mae = np.mean(np.abs(np.array(train_error)))
-            test_error = [self.evaluate(d.mol) - d.value for d in self.test]
-            test_mae = np.mean(np.abs(np.array(test_error)))
-            max_mae = max(test_mae, train_mae)
-            if max_mae < self.min_test_error:
-                self.min_test_error = max_mae
+            val_error = [self.evaluate(d.mol) - d.value for d in self.validation_set]
+            val_mae = np.mean(np.abs(np.array(val_error)))
+            max_mae = max(val_mae, train_mae)
+            if max_mae < self.min_val_error:
+                self.min_val_error = max_mae
                 self.best_tree_nodes = list(self.nodes.keys())
                 self.check_mol_node_maps()
                 self.bestA = A
@@ -687,8 +686,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
                     for k, v in self.mol_node_maps.items()
                 }
-            self.test_mae_kcal = test_mae / 4184.0
-            logging.error("test MAE: {} kcal/mol".format(self.test_mae_kcal))
+            self.val_mae = val_mae
+            logging.info("validation MAE: {}".format(self.val_mae))
 
         logging.info("# nodes: {}".format(len(self.nodes)))
 
