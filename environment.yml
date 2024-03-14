@@ -1,0 +1,19 @@
+name: pysidt_env
+channels:
+  - defaults
+  - conda-forge
+  - mjohnson541
+  - rmg
+dependencies:
+  - rdkit >=2020.03.3.0
+  - cython >=0.25.2
+  - conda-forge::openbabel >= 3
+  - cairo
+  - cairocffi
+  - pyrdl
+  - nose
+  - rmg::lpsolve55
+  - rmg::quantities
+  - scipy
+  - scikit-learn
+  - pydot
