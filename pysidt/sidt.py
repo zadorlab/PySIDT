@@ -296,7 +296,7 @@ class SubgraphIsomorphicDecisionTree:
         children = self.root.children
         node = self.root
 
-        while children != []:
+        while children:
             for child in children:
                 if mol.is_subgraph_isomorphic(
                     child.group, generate_initial_map=True, save_order=True
