@@ -145,8 +145,6 @@ class SubgraphIsomorphicDecisionTree:
         if not out and not recursing:
             logging.info("recursing")
             logging.info(node.group.to_adjacency_list())
-            # for item in node.items:
-            #     logging.error(item.to_adjacency_list())
             node.group.clear_reg_dims()
             return self.generate_extensions(node, recursing=True)
 
