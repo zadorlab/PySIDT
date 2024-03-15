@@ -352,6 +352,24 @@ def read_nodes(file):
 
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
+    """
+    Makes prediction for a molecule based on multiple evaluations.
+
+    Args:
+        `decomposition`: method to decompose a molecule into substructure contributions.
+        `root_group`: root group for the tree
+        `nodes`: dictionary of nodes for the tree
+        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
+        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
+        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
+        `r`: atom types to generate extensions. If None, all atom types will be used.
+        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
+        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_site`: surface sites to generate extensions. If None, [] will be used.
+        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+    """
+
     def __init__(
         self,
         decomposition,
