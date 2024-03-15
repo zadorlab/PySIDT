@@ -340,6 +340,7 @@ def read_nodes(file):
             parent=d["parent"],
             children=d["children"],
             name=d["name"],
+            depth=d["depth"],
         )
 
     for n, node in nodes.items():
