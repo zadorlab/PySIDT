@@ -385,6 +385,17 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_site=None,
         r_morph=None,
     ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+
         super().__init__(
             root_group=root_group,
             nodes=nodes,
