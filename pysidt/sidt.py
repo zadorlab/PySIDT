@@ -783,6 +783,11 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.node_uncertainties.update(
                 {node.name: 1.0 for i, node in enumerate(nodes)}
             )
+
+    def assign_depths(self):
+        root = self.root
+        _assign_depths(root)
+
     def evaluate(self, mol):
         """
         Evaluate tree for a given possibly labeled mol
@@ -843,3 +848,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.r_site,
             self.r_morph,
         )
+
+
+def _assign_depths(node, depth=0):
+    node.depth = depth
+    for child in node.children:
+        _assign_depths(child, depth=depth + 1)
