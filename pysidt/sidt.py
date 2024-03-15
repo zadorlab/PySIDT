@@ -14,7 +14,14 @@ logging.basicConfig(level=logging.INFO)
 
 class Node:
     def __init__(
-        self, group=None, items=None, rule=None, parent=None, children=None, name=None
+        self,
+        group=None,
+        items=None,
+        rule=None,
+        parent=None,
+        children=None,
+        name=None,
+        depth=None,
     ):
         if items is None:
             items = []
@@ -27,9 +34,10 @@ class Node:
         self.parent = parent
         self.children = children
         self.name = name
+        self.depth = depth
 
     def __repr__(self) -> str:
-        return f"{self.name} {self.rule}"
+        return f"{self.name} rule: {self.rule} depth: {self.depth}"
 
 
 class Datum:
