@@ -751,6 +751,38 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         logging.info("# nodes: {}".format(len(self.nodes)))
 
+    def estimate_uncertainty(self):
+        nodes = [node for node in self.nodes.values()]
+
+        # generate matrix
+        A = sp.csc_matrix((len(self.datums), len(nodes)))
+        y = np.array([datum.value for datum in self.datums])
+        preds = np.zeros(len(self.datums))
+
+        for i, datum in enumerate(self.datums):
+            for node in self.mol_node_maps[datum]["nodes"]:
+                while node is not None:
+                    if node in nodes:
+                        j = nodes.index(node)
+                        A[i, j] += 1.0
+                        preds[i] += node.rule
+                    node = node.parent
+
+        self.data_delta = preds - y
+
+        if A.shape[1] != 1:
+            node_uncertainties = (
+                np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                * (self.data_delta**2).sum()
+                / (len(self.datums) - len(nodes))
+            )
+            self.node_uncertainties.update(
+                {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
+            )
+        else:
+            self.node_uncertainties.update(
+                {node.name: 1.0 for i, node in enumerate(nodes)}
+            )
     def evaluate(self, mol):
         """
         Evaluate tree for a given possibly labeled mol
