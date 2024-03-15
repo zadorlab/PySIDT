@@ -40,7 +40,7 @@ def split_mols(data, newgrp):
 
 def get_extension_edge(
     parent,
-    n_splits,
+    n_strucs_min,
     iter_max=np.inf,
     iter_item_cap=np.inf,
     r=None,
@@ -83,7 +83,7 @@ def get_extension_edge(
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
-            n_splits=n_splits,
+            n_strucs_min=n_strucs_min,
         )
 
         reg_dict = dict()
@@ -325,7 +325,7 @@ def get_extensions(
     basename="",
     atm_ind=None,
     atm_ind2=None,
-    n_splits=None,
+    n_strucs_min=None,
 ):
     """
     generate all allowed group extensions and their complements
@@ -335,8 +335,8 @@ def get_extensions(
     #                 extents=list, RnH=list, typ=list)
     extents = []
 
-    if n_splits is None:
-        n_splits = len(grp.split())
+    if n_strucs_min is None:
+        n_strucs_min = len(grp.split())
 
     # generate appropriate r and r!H
     if r is None:
@@ -521,7 +521,7 @@ def get_extensions(
                 if j < i and not grp.has_bond(atm, atm2):
                     extents.extend(
                         specify_internal_new_bond_extensions(
-                            grp, i, j, n_splits, basename, r_bonds
+                            grp, i, j, n_strucs_min, basename, r_bonds
                         )
                     )
                 elif j < i:
@@ -549,7 +549,7 @@ def get_extensions(
         if j < i and not grp.has_bond(atm, atm2):
             extents.extend(
                 specify_internal_new_bond_extensions(
-                    grp, i, j, n_splits, basename, r_bonds
+                    grp, i, j, n_strucs_min, basename, r_bonds
                 )
             )
         if grp.has_bond(atm, atm2):
@@ -706,7 +706,7 @@ def get_extensions(
             if j < i and not grp.has_bond(atm, atm2):
                 extents.extend(
                     specify_internal_new_bond_extensions(
-                        grp, i, j, n_splits, basename, r_bonds
+                        grp, i, j, n_strucs_min, basename, r_bonds
                     )
                 )
             elif j < i:
@@ -952,7 +952,7 @@ def specify_morphology_extensions(grp, i, basename, r_morph):
     return grps
 
 
-def specify_internal_new_bond_extensions(grp, i, j, n_splits, basename, r_bonds):
+def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds):
     """
     generates extensions for creation of a bond (of undefined order)
     between two atoms indexed i,j that already exist in the group and are unbonded
@@ -989,7 +989,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_splits, basename, r_bonds)
         atom_type_j_str = atom_type_j[0].label
 
     if (
-        len(newgrp.split()) < n_splits
+        len(newgrp.split()) < n_strucs_min
     ):  # if this formed a bond between two seperate groups in the
         return []
     else:

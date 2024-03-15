@@ -52,7 +52,7 @@ class SubgraphIsomorphicDecisionTree:
         self,
         root_group=None,
         nodes=None,
-        n_splits=1,
+        n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
         r=None,
@@ -73,7 +73,7 @@ class SubgraphIsomorphicDecisionTree:
             r_morph = []
 
         self.nodes = nodes
-        self.n_splits = n_splits
+        self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
         self.iter_item_cap = iter_item_cap
         self.r = r
@@ -124,7 +124,7 @@ class SubgraphIsomorphicDecisionTree:
 
         out, gave_up_split = get_extension_edge(
             node,
-            self.n_splits,
+            self.n_strucs_min,
             r=self.r,
             r_bonds=self.r_bonds,
             r_un=self.r_un,
@@ -343,7 +343,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         decomposition,
         root_group=None,
         nodes=None,
-        n_splits=1,
+        n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
         fract_nodes_expand_per_iter=0,
@@ -356,7 +356,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         super().__init__(
             root_group=root_group,
             nodes=nodes,
-            n_splits=n_splits,
+            n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
             r=r,
