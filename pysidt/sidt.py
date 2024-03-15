@@ -417,6 +417,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.validation_set = None
         self.best_tree_nodes = None
         self.min_val_error = np.inf
+        self.assign_depths()
 
     def select_nodes(self, num=1):
         """
