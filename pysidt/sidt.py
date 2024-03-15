@@ -14,7 +14,14 @@ logging.basicConfig(level=logging.INFO)
 
 class Node:
     def __init__(
-        self, group=None, items=None, rule=None, parent=None, children=None, name=None
+        self,
+        group=None,
+        items=None,
+        rule=None,
+        parent=None,
+        children=None,
+        name=None,
+        depth=None,
     ):
         if items is None:
             items = []
@@ -27,9 +34,10 @@ class Node:
         self.parent = parent
         self.children = children
         self.name = name
+        self.depth = depth
 
     def __repr__(self) -> str:
-        return f"{self.name} {self.rule}"
+        return f"{self.name} rule: {self.rule} depth: {self.depth}"
 
 
 class Datum:
@@ -52,7 +60,7 @@ class SubgraphIsomorphicDecisionTree:
         self,
         root_group=None,
         nodes=None,
-        n_splits=1,
+        n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
         r=None,
@@ -73,7 +81,7 @@ class SubgraphIsomorphicDecisionTree:
             r_morph = []
 
         self.nodes = nodes
-        self.n_splits = n_splits
+        self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
         self.iter_item_cap = iter_item_cap
         self.r = r
@@ -124,7 +132,7 @@ class SubgraphIsomorphicDecisionTree:
 
         out, gave_up_split = get_extension_edge(
             node,
-            self.n_splits,
+            self.n_strucs_min,
             r=self.r,
             r_bonds=self.r_bonds,
             r_un=self.r_un,
@@ -137,8 +145,6 @@ class SubgraphIsomorphicDecisionTree:
         if not out and not recursing:
             logging.info("recursing")
             logging.info(node.group.to_adjacency_list())
-            # for item in node.items:
-            #     logging.error(item.to_adjacency_list())
             node.group.clear_reg_dims()
             return self.generate_extensions(node, recursing=True)
 
@@ -179,7 +185,13 @@ class SubgraphIsomorphicDecisionTree:
         logging.info("Choose extension {}".format(name))
 
         node = Node(
-            group=grp, items=new, rule=None, parent=parent, children=[], name=name
+            group=grp,
+            items=new,
+            rule=None,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
         )
         self.nodes[name] = node
         parent.children.append(node)
@@ -198,6 +210,7 @@ class SubgraphIsomorphicDecisionTree:
                 parent=parent,
                 children=[],
                 name=cextname,
+                depth=parent.depth + 1,
             )
             self.nodes[cextname] = nodec
             parent.children.append(nodec)
@@ -283,7 +296,7 @@ class SubgraphIsomorphicDecisionTree:
         children = self.root.children
         node = self.root
 
-        while children != []:
+        while children:
             for child in children:
                 if mol.is_subgraph_isomorphic(
                     child.group, generate_initial_map=True, save_order=True
@@ -327,6 +340,7 @@ def read_nodes(file):
             parent=d["parent"],
             children=d["children"],
             name=d["name"],
+            depth=d["depth"],
         )
 
     for n, node in nodes.items():
@@ -338,12 +352,30 @@ def read_nodes(file):
 
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
+    """
+    Makes prediction for a molecule based on multiple evaluations.
+
+    Args:
+        `decomposition`: method to decompose a molecule into substructure contributions.
+        `root_group`: root group for the tree
+        `nodes`: dictionary of nodes for the tree
+        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
+        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
+        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
+        `r`: atom types to generate extensions. If None, all atom types will be used.
+        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
+        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_site`: surface sites to generate extensions. If None, [] will be used.
+        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+    """
+
     def __init__(
         self,
         decomposition,
         root_group=None,
         nodes=None,
-        n_splits=1,
+        n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
         fract_nodes_expand_per_iter=0,
@@ -353,10 +385,21 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_site=None,
         r_morph=None,
     ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+
         super().__init__(
             root_group=root_group,
             nodes=nodes,
-            n_splits=n_splits,
+            n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
             r=r,
@@ -374,6 +417,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.validation_set = None
         self.best_tree_nodes = None
         self.min_val_error = np.inf
+        self.assign_depths()
 
     def select_nodes(self, num=1):
         """
@@ -417,7 +461,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         grp, grpc, name, typ, indc = exts[ind]
 
         node = Node(
-            group=grp, items=new, rule=None, parent=parent, children=[], name=name
+            group=grp,
+            items=new,
+            rule=None,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
         )
 
         assert not (name in self.nodes.keys()), name
@@ -452,6 +502,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 parent=parent,
                 children=[],
                 name=cextname,
+                depth=parent.depth + 1,
             )
 
             self.nodes[cextname] = nodec
@@ -636,47 +687,45 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.setup_data(data, check_data=check_data)
             self.descend_training_from_top(only_specific_match=True)
 
-        # generate matrix
-        A = sp.csc_matrix((len(self.datums), len(self.nodes)))
+        self.fit_rule(alpha=alpha)
+
+        self.estimate_uncertainty()
+
+    def fit_rule(self, alpha=0.1):
+        max_depth = max([node.depth for node in self.nodes.values()])
         y = np.array([datum.value for datum in self.datums])
+        preds = np.zeros(len(self.datums))
+        self.node_uncertainties = dict()
 
-        nodes = list(self.nodes.values())
-        for i, datum in enumerate(self.datums):
-            for node in self.mol_node_maps[datum]["nodes"]:
-                while node is not None:
-                    try:
-                        j = nodes.index(node)
-                    except Exception as e:
-                        logging.info(node.name)
-                        raise e
-                    A[i, j] += 1.0
-                    node = node.parent
+        for depth in range(max_depth + 1):
+            nodes = [node for node in self.nodes.values() if node.depth == depth]
 
-        clf = linear_model.Lasso(
-            alpha=alpha,
-            fit_intercept=False,
-            tol=1e-4,
-            max_iter=1000000000,
-            selection="random",
-        )
+            # generate matrix
+            A = sp.lil_matrix((len(self.datums), len(nodes)))
+            y -= preds
 
-        pred = clf.fit(A, y)
-        self.data_delta = A * clf.coef_ - y
+            for i, datum in enumerate(self.datums):
+                for node in self.mol_node_maps[datum]["nodes"]:
+                    while node is not None:
+                        if node in nodes:
+                            j = nodes.index(node)
+                            A[i, j] += 1.0
+                        node = node.parent
 
-        if A.shape[1] != 1:
-            node_uncertainties = (
-                np.diag(np.linalg.pinv((A.T @ A).toarray()))
-                * (self.data_delta**2).sum()
-                / (len(self.datums) - len(self.nodes))
+            clf = linear_model.Lasso(
+                alpha=alpha,
+                fit_intercept=False,
+                tol=1e-4,
+                max_iter=1000000000,
+                selection="random",
             )
-            self.node_uncertainties = {
-                node.name: node_uncertainties[i] for i, node in enumerate(nodes)
-            }
-        else:
-            self.node_uncertainties = {node.name: 1.0 for i, node in enumerate(nodes)}
 
-        for i, val in enumerate(clf.coef_):
-            nodes[i].rule = val
+            lasso = clf.fit(A, y)
+            preds = A * clf.coef_
+            self.data_delta = preds - y
+
+            for i, val in enumerate(clf.coef_):
+                nodes[i].rule = val
 
         train_error = [self.evaluate(d.mol) - d.value for d in self.datums]
 
@@ -701,6 +750,43 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             logging.info("validation MAE: {}".format(self.val_mae))
 
         logging.info("# nodes: {}".format(len(self.nodes)))
+
+    def estimate_uncertainty(self):
+        nodes = [node for node in self.nodes.values()]
+
+        # generate matrix
+        A = sp.csc_matrix((len(self.datums), len(nodes)))
+        y = np.array([datum.value for datum in self.datums])
+        preds = np.zeros(len(self.datums))
+
+        for i, datum in enumerate(self.datums):
+            for node in self.mol_node_maps[datum]["nodes"]:
+                while node is not None:
+                    if node in nodes:
+                        j = nodes.index(node)
+                        A[i, j] += 1.0
+                        preds[i] += node.rule
+                    node = node.parent
+
+        self.data_delta = preds - y
+
+        if A.shape[1] != 1:
+            node_uncertainties = (
+                np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                * (self.data_delta**2).sum()
+                / (len(self.datums) - len(nodes))
+            )
+            self.node_uncertainties.update(
+                {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
+            )
+        else:
+            self.node_uncertainties.update(
+                {node.name: 1.0 for i, node in enumerate(nodes)}
+            )
+
+    def assign_depths(self):
+        root = self.root
+        _assign_depths(root)
 
     def evaluate(self, mol):
         """
@@ -762,3 +848,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.r_site,
             self.r_morph,
         )
+
+
+def _assign_depths(node, depth=0):
+    node.depth = depth
+    for child in node.children:
+        _assign_depths(child, depth=depth + 1)
