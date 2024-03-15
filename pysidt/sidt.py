@@ -687,47 +687,45 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.setup_data(data, check_data=check_data)
             self.descend_training_from_top(only_specific_match=True)
 
-        # generate matrix
-        A = sp.csc_matrix((len(self.datums), len(self.nodes)))
+        self.fit_rule(alpha=alpha)
+
+        self.estimate_uncertainty()
+
+    def fit_rule(self, alpha=0.1):
+        max_depth = max([node.depth for node in self.nodes.values()])
         y = np.array([datum.value for datum in self.datums])
+        preds = np.zeros(len(self.datums))
+        self.node_uncertainties = dict()
 
-        nodes = list(self.nodes.values())
-        for i, datum in enumerate(self.datums):
-            for node in self.mol_node_maps[datum]["nodes"]:
-                while node is not None:
-                    try:
-                        j = nodes.index(node)
-                    except Exception as e:
-                        logging.info(node.name)
-                        raise e
-                    A[i, j] += 1.0
-                    node = node.parent
+        for depth in range(max_depth + 1):
+            nodes = [node for node in self.nodes.values() if node.depth == depth]
 
-        clf = linear_model.Lasso(
-            alpha=alpha,
-            fit_intercept=False,
-            tol=1e-4,
-            max_iter=1000000000,
-            selection="random",
-        )
+            # generate matrix
+            A = sp.lil_matrix((len(self.datums), len(nodes)))
+            y -= preds
 
-        pred = clf.fit(A, y)
-        self.data_delta = A * clf.coef_ - y
+            for i, datum in enumerate(self.datums):
+                for node in self.mol_node_maps[datum]["nodes"]:
+                    while node is not None:
+                        if node in nodes:
+                            j = nodes.index(node)
+                            A[i, j] += 1.0
+                        node = node.parent
 
-        if A.shape[1] != 1:
-            node_uncertainties = (
-                np.diag(np.linalg.pinv((A.T @ A).toarray()))
-                * (self.data_delta**2).sum()
-                / (len(self.datums) - len(self.nodes))
+            clf = linear_model.Lasso(
+                alpha=alpha,
+                fit_intercept=False,
+                tol=1e-4,
+                max_iter=1000000000,
+                selection="random",
             )
-            self.node_uncertainties = {
-                node.name: node_uncertainties[i] for i, node in enumerate(nodes)
-            }
-        else:
-            self.node_uncertainties = {node.name: 1.0 for i, node in enumerate(nodes)}
 
-        for i, val in enumerate(clf.coef_):
-            nodes[i].rule = val
+            lasso = clf.fit(A, y)
+            preds = A * clf.coef_
+            self.data_delta = preds - y
+
+            for i, val in enumerate(clf.coef_):
+                nodes[i].rule = val
 
         train_error = [self.evaluate(d.mol) - d.value for d in self.datums]
 
