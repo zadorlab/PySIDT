@@ -185,7 +185,13 @@ class SubgraphIsomorphicDecisionTree:
         logging.info("Choose extension {}".format(name))
 
         node = Node(
-            group=grp, items=new, rule=None, parent=parent, children=[], name=name
+            group=grp,
+            items=new,
+            rule=None,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
         )
         self.nodes[name] = node
         parent.children.append(node)
@@ -204,6 +210,7 @@ class SubgraphIsomorphicDecisionTree:
                 parent=parent,
                 children=[],
                 name=cextname,
+                depth=parent.depth + 1,
             )
             self.nodes[cextname] = nodec
             parent.children.append(nodec)
@@ -423,7 +430,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         grp, grpc, name, typ, indc = exts[ind]
 
         node = Node(
-            group=grp, items=new, rule=None, parent=parent, children=[], name=name
+            group=grp,
+            items=new,
+            rule=None,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
         )
 
         assert not (name in self.nodes.keys()), name
@@ -458,6 +471,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 parent=parent,
                 children=[],
                 name=cextname,
+                depth=parent.depth + 1,
             )
 
             self.nodes[cextname] = nodec
