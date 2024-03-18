@@ -353,7 +353,7 @@ def get_extensions(
 
     # generate appropriate r and r!H
     if r is None:
-        r = elements.bde_elements  # set of possible r elements/atoms
+        r = bde_elements  # set of possible r elements/atoms
         r = [ATOMTYPES[x] for x in r]
 
     if ATOMTYPES["X"] in r and ATOMTYPES["H"] in r:
