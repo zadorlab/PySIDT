@@ -48,10 +48,10 @@ def get_extension_edge(
     iter_max=np.inf,
     iter_item_cap=np.inf,
     r=None,
-    r_bonds=[1, 2, 3, 1.5, 4],
-    r_un=[0, 1, 2, 3],
-    r_site=[],
-    r_morph=[],
+    r_bonds=None,
+    r_un=None,
+    r_site=None,
+    r_morph=None,
 ):
     """
     finds the set of all extension groups to parent such that
@@ -68,6 +68,15 @@ def get_extension_edge(
 
     Speed of this algorithm relies heavily on searching non bond creation dimensions once.
     """
+    if r_bonds is None:
+        r_bonds = [1, 2, 3, 1.5, 4]
+    if r_un is None:
+        r_un = [0, 1, 2, 3]
+    if r_site is None:
+        r_site = []
+    if r_morph is None:
+        r_morph = []
+
     out_exts = [[]]
     grps = [[parent.group]]
     names = [parent.name]
