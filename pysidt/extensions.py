@@ -1,8 +1,12 @@
 import logging
+from copy import deepcopy
+
 import numpy as np
+
 from molecule.molecule.atomtype import ATOMTYPES
-from molecule.molecule.group import *
-from molecule.molecule import *
+from molecule.molecule.element import bde_elements
+from molecule.molecule.group import GroupAtom, GroupBond
+from molecule.molecule.molecule import Molecule
 
 
 def split_mols(data, newgrp):
