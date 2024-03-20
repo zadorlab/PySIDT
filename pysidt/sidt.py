@@ -97,7 +97,7 @@ class SubgraphIsomorphicDecisionTree:
                 node = node.parent
             self.root = node
         elif root_group:
-            self.root = Node(root_group, name="Root")
+            self.root = Node(root_group, name="Root", depth=0)
             self.nodes = {"Root": self.root}
 
     def load(self, nodes):
