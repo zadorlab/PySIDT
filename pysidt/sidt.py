@@ -337,6 +337,32 @@ def to_dict(obj):
     
     return out_dict
 
+
+def from_dict(d, class_dict=None):
+    """construct objects from dictionary
+    
+    Args:
+        d (dict): dictionary describing object, particularly containing a value
+                associated with "class" identifying a string of the class of the object
+        class_dict (dict, optional): dictionary mapping class strings to the class objects/constructors
+
+    Returns:
+        object associated with dictionary
+    """
+    if class_dict is None:
+        class_dict = dict()
+
+    construct_d = dict()
+    for k, v in d.items():
+        if k == "class":
+            continue
+        if isinstance(v,dict) and "class" in v.keys():
+            construct_d[k] = from_dict(v, class_dict=class_dict)
+        else:
+            construct_d[k] = v
+            
+    return class_dict[d["class"]](**construct_d)
+
 def write_nodes(tree, file):
     nodesdict = dict()
     for node in tree.nodes.values():
