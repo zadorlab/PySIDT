@@ -47,3 +47,4 @@ jobs:
       - name: Test PySIDT notebooks
         run: |
           pytest --nbmake IPython/multi_eval_SIDT_example.ipynb
+          pytest --nbmake IPython/Surface_Diffusion_single_eval_SIDT_example.ipynb
