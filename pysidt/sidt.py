@@ -1,4 +1,5 @@
 from molecule.molecule import Group
+from molecule.quantity import ScalarQuantity
 from pysidt.extensions import split_mols, get_extension_edge
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
@@ -396,7 +397,17 @@ def write_nodes(tree, file):
         json.dump(nodesdict, f)
 
 
-def read_nodes(file):
+def read_nodes(file, class_dict=dict()):
+    """_summary_
+
+    Args:
+        file (string): string of JSON file to laod
+        class_dict (dict): maps class names to classes for any non-JSON 
+                    serializable types that need constructed
+
+    Returns:
+        nodes (list): list of nodes for tree
+    """
     with open(file, "r") as f:
         nodesdict = json.load(f)
     nodes = dict()
@@ -414,6 +425,8 @@ def read_nodes(file):
         if node.parent:
             node.parent = nodes[node.parent]
         node.children = [nodes[child] for child in node.children]
+        if isinstance(node.rule, dict) and "class" in node.rule.keys():
+            node.rule = from_dict(node.rule, class_dict=class_dict)
 
     return nodes
 
