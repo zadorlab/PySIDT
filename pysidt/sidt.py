@@ -370,12 +370,26 @@ def write_nodes(tree, file):
             p = None
         else:
             p = node.parent.name
+            
+        try:
+            json.dumps(node.rule)
+            rule = node.rule
+        except (TypeError, OverflowError):
+            rule = to_dict(node.rule) #will work on all rmgmolecule objects, new objects need this method implemented
+            try:
+                json.dumps(rule)
+            except:
+                raise ValueError(
+                    f"Could not serialize object {node.rule.__class__.__name__}"
+                )
+
         nodesdict[node.name] = {
             "group": node.group.to_adjacency_list(),
-            "rule": node.rule,
+            "rule": rule,
             "parent": p,
             "children": [x.name for x in node.children],
             "name": node.name,
+            "depth": node.depth
         }
 
     with open(file, "w") as f:
