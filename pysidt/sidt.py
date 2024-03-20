@@ -309,6 +309,33 @@ class SubgraphIsomorphicDecisionTree:
 
         return node.rule
 
+def to_dict(obj):
+    out_dict = dict()
+    out_dict["class"] = obj.__class__.__name__
+    attrs = [attr for attr in dir(obj) if not attr.startswith('_')]
+    for attr in attrs:
+        
+        val = getattr(obj, attr)
+        
+        if callable(val) or val == getattr(obj.__class__,attr):
+            continue
+        
+        try:
+            json.dumps(val)
+            out_dict[attr] = val
+        except:
+            if isinstance(val, ScalarQuantity):
+                out_dict[attr] = {
+                    "class": val.__class__.__name__,
+                    "value": val.value,
+                    "units": val.units,
+                    "uncertainty": val.uncertainty,
+                    "uncertainty_type": val.uncertainty_type,
+                }
+            else:
+                out_dict[attr] = to_dict(val)
+    
+    return out_dict
 
 def write_nodes(tree, file):
     nodesdict = dict()
