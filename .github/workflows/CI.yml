@@ -17,11 +17,6 @@ jobs:
       - name: Checkout PySIDT
         uses: actions/checkout@v4
 
-      - name: Clone ReactionMechanismGenerator/molecule
-        run: |
-          cd ..
-          git clone -b ts_len_improvements https://github.com/ReactionMechanismGenerator/molecule.git
-
       - name: Create pysidt environment
         uses: conda-incubator/setup-miniconda@v3
         with:
@@ -36,13 +31,6 @@ jobs:
         run: |
           python -m pip install pytest nbmake
           python -m pip install -e .
-
-      - name: Make and install molecule
-        run: |
-          cd ../molecule
-          make clean
-          make
-          pip install -e .
 
       - name: Test PySIDT notebooks
         run: |
