@@ -5,15 +5,12 @@ channels:
   - mjohnson541
   - rmg
 dependencies:
-  - rdkit >=2020.03.3.0
-  - cython >=0.25.2
-  - conda-forge::openbabel >= 3
-  - cairo
-  - cairocffi
-  - pyrdl
+  - python >=3.7,<3.10
+  - jupyter
   - nose
-  - rmg::lpsolve55
-  - rmg::quantities
-  - scipy
-  - scikit-learn
+  - numpy
   - pydot
+  - mjohnson541::rmgmolecule >=0.3.0
+  - scikit-learn
+  - scipy
+  
