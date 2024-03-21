@@ -1,4 +1,5 @@
 from molecule.molecule import Group
+from molecule.quantity import ScalarQuantity
 from pysidt.extensions import split_mols, get_extension_edge
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
@@ -97,7 +98,7 @@ class SubgraphIsomorphicDecisionTree:
                 node = node.parent
             self.root = node
         elif root_group:
-            self.root = Node(root_group, name="Root")
+            self.root = Node(root_group, name="Root", depth=0)
             self.nodes = {"Root": self.root}
 
     def load(self, nodes):
@@ -310,6 +311,60 @@ class SubgraphIsomorphicDecisionTree:
         return node.rule
 
 
+def to_dict(obj):
+    out_dict = dict()
+    out_dict["class"] = obj.__class__.__name__
+    attrs = [attr for attr in dir(obj) if not attr.startswith("_")]
+    for attr in attrs:
+        val = getattr(obj, attr)
+
+        if callable(val) or val == getattr(obj.__class__, attr):
+            continue
+
+        try:
+            json.dumps(val)
+            out_dict[attr] = val
+        except:
+            if isinstance(val, ScalarQuantity):
+                out_dict[attr] = {
+                    "class": val.__class__.__name__,
+                    "value": val.value,
+                    "units": val.units,
+                    "uncertainty": val.uncertainty,
+                    "uncertainty_type": val.uncertainty_type,
+                }
+            else:
+                out_dict[attr] = to_dict(val)
+
+    return out_dict
+
+
+def from_dict(d, class_dict=None):
+    """construct objects from dictionary
+    
+    Args:
+        d (dict): dictionary describing object, particularly containing a value
+                associated with "class" identifying a string of the class of the object
+        class_dict (dict, optional): dictionary mapping class strings to the class objects/constructors
+
+    Returns:
+        object associated with dictionary
+    """
+    if class_dict is None:
+        class_dict = dict()
+
+    construct_d = dict()
+    for k, v in d.items():
+        if k == "class":
+            continue
+        if isinstance(v, dict) and "class" in v.keys():
+            construct_d[k] = from_dict(v, class_dict=class_dict)
+        else:
+            construct_d[k] = v
+
+    return class_dict[d["class"]](**construct_d)
+
+
 def write_nodes(tree, file):
     nodesdict = dict()
     for node in tree.nodes.values():
@@ -317,19 +372,45 @@ def write_nodes(tree, file):
             p = None
         else:
             p = node.parent.name
+
+        try:
+            json.dumps(node.rule)
+            rule = node.rule
+        except (TypeError, OverflowError):
+            rule = to_dict(
+                node.rule
+            )  # will work on all rmgmolecule objects, new objects need this method implemented
+            try:
+                json.dumps(rule)
+            except:
+                raise ValueError(
+                    f"Could not serialize object {node.rule.__class__.__name__}"
+                )
+
         nodesdict[node.name] = {
             "group": node.group.to_adjacency_list(),
-            "rule": node.rule,
+            "rule": rule,
             "parent": p,
             "children": [x.name for x in node.children],
             "name": node.name,
+            "depth": node.depth,
         }
 
     with open(file, "w") as f:
         json.dump(nodesdict, f)
 
 
-def read_nodes(file):
+def read_nodes(file, class_dict=dict()):
+    """_summary_
+
+    Args:
+        file (string): string of JSON file to laod
+        class_dict (dict): maps class names to classes for any non-JSON
+                    serializable types that need constructed
+
+    Returns:
+        nodes (list): list of nodes for tree
+    """
     with open(file, "r") as f:
         nodesdict = json.load(f)
     nodes = dict()
@@ -347,6 +428,8 @@ def read_nodes(file):
         if node.parent:
             node.parent = nodes[node.parent]
         node.children = [nodes[child] for child in node.children]
+        if isinstance(node.rule, dict) and "class" in node.rule.keys():
+            node.rule = from_dict(node.rule, class_dict=class_dict)
 
     return nodes
 
