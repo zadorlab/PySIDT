@@ -310,17 +310,17 @@ class SubgraphIsomorphicDecisionTree:
 
         return node.rule
 
+
 def to_dict(obj):
     out_dict = dict()
     out_dict["class"] = obj.__class__.__name__
-    attrs = [attr for attr in dir(obj) if not attr.startswith('_')]
+    attrs = [attr for attr in dir(obj) if not attr.startswith("_")]
     for attr in attrs:
-        
         val = getattr(obj, attr)
-        
-        if callable(val) or val == getattr(obj.__class__,attr):
+
+        if callable(val) or val == getattr(obj.__class__, attr):
             continue
-        
+
         try:
             json.dumps(val)
             out_dict[attr] = val
@@ -335,7 +335,7 @@ def to_dict(obj):
                 }
             else:
                 out_dict[attr] = to_dict(val)
-    
+
     return out_dict
 
 
@@ -357,12 +357,13 @@ def from_dict(d, class_dict=None):
     for k, v in d.items():
         if k == "class":
             continue
-        if isinstance(v,dict) and "class" in v.keys():
+        if isinstance(v, dict) and "class" in v.keys():
             construct_d[k] = from_dict(v, class_dict=class_dict)
         else:
             construct_d[k] = v
-            
+
     return class_dict[d["class"]](**construct_d)
+
 
 def write_nodes(tree, file):
     nodesdict = dict()
@@ -371,12 +372,14 @@ def write_nodes(tree, file):
             p = None
         else:
             p = node.parent.name
-            
+
         try:
             json.dumps(node.rule)
             rule = node.rule
         except (TypeError, OverflowError):
-            rule = to_dict(node.rule) #will work on all rmgmolecule objects, new objects need this method implemented
+            rule = to_dict(
+                node.rule
+            )  # will work on all rmgmolecule objects, new objects need this method implemented
             try:
                 json.dumps(rule)
             except:
@@ -390,7 +393,7 @@ def write_nodes(tree, file):
             "parent": p,
             "children": [x.name for x in node.children],
             "name": node.name,
-            "depth": node.depth
+            "depth": node.depth,
         }
 
     with open(file, "w") as f:
@@ -402,7 +405,7 @@ def read_nodes(file, class_dict=dict()):
 
     Args:
         file (string): string of JSON file to laod
-        class_dict (dict): maps class names to classes for any non-JSON 
+        class_dict (dict): maps class names to classes for any non-JSON
                     serializable types that need constructed
 
     Returns:
