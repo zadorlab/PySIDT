@@ -555,6 +555,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.datums = None
         self.validation_set = None
         self.best_tree_nodes = None
+        self.best_rule_map = None
         self.min_val_error = np.inf
         self.assign_depths()
         self.W = None # weight matrix for weighted least squares
@@ -833,8 +834,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         children_to_remove.append(child)
                 for child in children_to_remove:
                     node.children.remove(child)
-
-            self.fit_tree(data=None, check_data=False, alpha=alpha)
+            for n,node in self.nodes.items():
+                node.rule = self.best_rule_map[n]
 
     def fit_tree(self, data=None, check_data=True, alpha=0.1, confidence_level=0.95):
         """
@@ -901,13 +902,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             if val_mae < self.min_val_error:
                 self.min_val_error = val_mae
                 self.best_tree_nodes = list(self.nodes.keys())
-                self.check_mol_node_maps()
                 self.bestA = A
                 self.best_nodes = {k: v for k, v in self.nodes.items()}
                 self.best_mol_node_maps = {
                     k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
                     for k, v in self.mol_node_maps.items()
                 }
+                self.best_rule_map = {name:self.nodes[name].rule for name in self.best_tree_nodes}
             self.val_mae = val_mae
             logging.info("validation MAE: {}".format(self.val_mae))
 
