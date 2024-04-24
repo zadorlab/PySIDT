@@ -75,6 +75,7 @@ class SubgraphIsomorphicDecisionTree:
         self,
         root_group=None,
         nodes=None,
+        initial_root_splits=None,
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
@@ -116,6 +117,12 @@ class SubgraphIsomorphicDecisionTree:
         elif root_group:
             self.root = Node(root_group, name="Root", depth=0)
             self.nodes = {"Root": self.root}
+            if initial_root_splits:
+                for i,grp in enumerate(initial_root_splits):
+                    name = "Root_"+str(i)
+                    n = Node(grp,name=name,depth=1,parent=self.root)
+                    self.root.children.append(n)
+                    self.nodes[name] = n
 
     def load(self, nodes):
         self.nodes = nodes
@@ -289,6 +296,8 @@ class SubgraphIsomorphicDecisionTree:
 
             self.clear_data()
             self.root.items = data[:]
+            if len(self.nodes) > 1:
+                self.descend_training_from_top()
 
         node = self.select_node()
 
@@ -512,6 +521,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         decomposition,
         root_group=None,
         nodes=None,
+        initial_root_splits=None,
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
@@ -537,6 +547,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         super().__init__(
             root_group=root_group,
             nodes=nodes,
+            initial_root_splits=initial_root_splits,
             n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
@@ -785,6 +796,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `alpha`: regularization parameter for Lasso regression
         """
         self.setup_data(data, check_data=check_data)
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
         self.val_mae = np.inf
         self.skip_nodes = []
         self.new_nodes = []
