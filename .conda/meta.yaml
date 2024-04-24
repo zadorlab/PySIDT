@@ -1,0 +1,38 @@
+# For conda build
+package:
+  name: pysidt
+  version: 0.1.0
+
+source:
+  path: ../
+
+build:
+  number: {{ environ.get('GIT_DESCRIBE_NUMBER', 0) }}
+
+requirements:
+  build:
+    - python
+  host:
+    - jupyter
+    - nose
+    - numpy
+    - pydot
+    - rmgmolecule >=0.3.0
+    - scikit-learn
+    - scipy
+  run:
+    - jupyter
+    - nose
+    - numpy
+    - pydot
+    - rmgmolecule >=0.3.0
+    - scikit-learn
+    - scipy
+test:
+  imports:
+    - pysidt
+
+about:
+  home: https://github.com/zadorlab/PySIDT
+  license: GNU
+  summary: "An automated workflow code to enable the calculation of thermochemistry and rate coefficients for reactions involving metallic surfaces."
