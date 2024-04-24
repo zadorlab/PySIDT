@@ -1,1 +1,1 @@
-cp -r ${SRC_DIR}/pynta ${SP_DIR}
+cp -r ${SRC_DIR}/PySIDT ${SP_DIR}

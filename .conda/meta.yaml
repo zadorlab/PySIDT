@@ -13,6 +13,7 @@ requirements:
   build:
     - python
   host:
+    - python
     - jupyter
     - nose
     - numpy
@@ -21,6 +22,7 @@ requirements:
     - scikit-learn
     - scipy
   run:
+    - python
     - jupyter
     - nose
     - numpy
