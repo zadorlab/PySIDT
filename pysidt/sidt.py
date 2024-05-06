@@ -1121,6 +1121,49 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         self.fract_threshold_to_predict_true = fract_threshold_to_predict_true
         self.max_accuracy = 0.0
 
+    def select_nodes(self):
+        """
+        Picks the node with the most decompositions who a change in the decomposition's classification might improve overall classification
+        adding multiple nodes would require the datum map variables to need updated before analyzing what data to split the node over as
+        those maps may change when a node is added
+        """
+        self.datum_truth_map = {datum:[getattr(n,"rule") for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+        self.datum_node_map = {datum:[n for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+        
+        if len(self.nodes) > 1:
+            node_scores = {node.name:0 for node in self.nodes.values()}
+            for k, datum in enumerate(self.datums):
+                boos = self.datum_truth_map[datum]
+                nodes = self.datum_node_map[datum]
+                c = boos.count(False)
+                for i in range(len(nodes)):
+                    if datum.value and c >= 1:
+                        if not boos[i]:
+                            node_scores[nodes[i].name] += 1
+                    elif not datum.value and c == 0:
+                        if boos[i]:
+                            node_scores[nodes[i].name] += 1
+
+            rulevals = [
+                node_scores[node.name]
+                if len(node.items) > 1
+                and not (node.name in self.new_nodes)
+                and not (node.name in self.skip_nodes)
+                else 0.0
+                for node in self.nodes.values()
+            ]
+            inds = np.argsort(rulevals)
+            ind = np.argmax(rulevals)
+            v = np.max(rulevals)
+            node = list(self.nodes.values())[ind]
+            logging.info(f"selected {node.name}")
+            if v == 0:
+                return None
+            else:
+                return [node]
+        else:
+            return list(self.nodes.values())
+
 
 def _assign_depths(node, depth=0):
     node.depth = depth
