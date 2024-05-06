@@ -1473,6 +1473,99 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             for n,node in self.nodes.items():
                 node.rule = self.best_rule_map[n]
             
+    def trim_tree(self):
+        """
+        Many of the tree extension sets improve the split, but do not change predictions
+        this function 1) merges nodes with their parents if they can be removed without affecting classifications
+        2) merges nodes with their parents if they do not result in different predictions
+        """
+
+        self.datum_truth_map = {datum:[getattr(n,"rule") for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+        self.datum_node_map = {datum:[n for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+
+        check_nodes = True
+        while check_nodes:
+            check_nodes = False
+            items_to_delete = []
+            items_to_delete_values = []
+            for name,node in self.nodes.items():
+                if node.rule or node.parent is None:
+                    continue
+                break_loop = False
+                for k, datum in enumerate(self.datums):
+                    boos = self.datum_truth_map[datum]
+                    nodes = self.datum_node_map[datum]
+                    c = boos.count(False)
+                    for i in range(len(nodes)):
+                        if not datum.value and c == 1: #classification at this node matters for proper classification of this training item
+                            break_loop = True
+                            break
+                    if break_loop:
+                        break
+                else:
+                    items_to_delete.append(node)
+                    items_to_delete_values.append(node.items)
+                    
+            if items_to_delete:
+                ind = np.argmin(np.array(items_to_delete_values))
+                node = items_to_delete[ind]
+                logging.info(f"Deleting node {node.name} because unnecessary for classification")
+                node.parent.children.remove(node)
+                node.parent.children.extend(node.children)
+                node.parent.items += node.items
+                for n in item_to_delete.children:
+                    n.parent = item_to_delete.parent
+                check_nodes = True
+        
+        #merge nodes with parents that give same predictions 
+        self.setup_data(data=self.datums)
+        to_delete = []
+        boo = True
+        while boo:
+            temp_to_delete = []
+            for name,node in self.nodes.items():
+                if name in to_delete:
+                    continue
+                if node.parent and node.rule == node.parent.rule:
+                    seen_node = False
+                    for child in node.parent.children:
+                        break_loop = False
+                        if child is node:
+                            seen_node = True
+                            continue
+                        if seen_node:
+                            for k, datum in enumerate(self.datums):
+                                for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                                    if d.is_subgraph_isomorphic(node.group, generate_initial_map=True, save_order=True):
+                                        if all(not d.is_subgraph_isomorphic(c.group, generate_initial_map=True, save_order=True) for c in node.children):
+                                            if d.is_subgraph_isomorphic(child.group, generate_initial_map=True, save_order=True):
+                                                break_loop = True
+                                                break
+                            if break_loop:
+                                break
+                    else:
+                        logging.info(f"Removing node {node.name}")
+
+                        ind = node.parent.children.index(node)
+                        node.parent.children = node.parent.children[:ind] + node.children + node.parent.children[ind+1:]
+                        for n in node.children:
+                            n.parent = node.parent
+                        node.parent.items += node.items
+                        self.analyze_error()
+                            
+                        for k, datum in enumerate(self.datums):
+                            for i, n in enumerate(self.mol_node_maps[datum]["nodes"]):
+                                if n == node:
+                                    assert self.mol_node_maps[datum]["nodes"][i].rule == node.parent.rule
+                                    self.mol_node_maps[datum]["nodes"][i] = node.parent
+                                    
+                        temp_to_delete.append(name)
+            to_delete.extend(temp_to_delete)
+            boo = len(temp_to_delete) > 0 
+            
+        for name in to_delete:
+            del self.nodes[name]
+            
 
 def _assign_depths(node, depth=0):
     node.depth = depth
