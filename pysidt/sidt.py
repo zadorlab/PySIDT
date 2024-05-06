@@ -1566,6 +1566,16 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         for name in to_delete:
             del self.nodes[name]
             
+def analyze_binary_classification(preds,true_values):
+    P = sum(true_values)
+    N = len(preds) - P
+    PP = sum(preds)
+    PN = len(preds) - PP
+    TP = sum([True for i in range(len(preds)) if preds[i] and true_values[i]])
+    FN = sum([True for i in range(len(preds)) if not preds[i] and true_values[i]])
+    FP = sum([True for i in range(len(preds)) if preds[i] and not true_values[i]])
+    TN = sum([True for i in range(len(preds)) if not preds[i] and not true_values[i]])
+    return P,N,PP,PN,TP,FN,FP,TN
 
 def _assign_depths(node, depth=0):
     node.depth = depth
