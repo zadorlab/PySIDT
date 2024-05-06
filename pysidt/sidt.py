@@ -946,6 +946,74 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.r_morph,
         )
 
+class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
+    """
+    This SIDT class is a multi-evaluation "and" classifier 
+    Every molecular decomposition is evaluated in the tree to True or False
+    If any decomposition is False the input is classified as False, otherwise it is classified as True
+    Note that one can use this as an "or" classifier by flipping the query of interest and the training data (False => True and True => False)
+    Args:
+        `decomposition`: method to decompose a molecule into substructure contributions.
+        `root_group`: root group for the tree
+        `nodes`: dictionary of nodes for the tree
+        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
+        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
+        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
+        `r`: atom types to generate extensions. If None, all atom types will be used.
+        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
+        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_site`: surface sites to generate extensions. If None, [] will be used.
+        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+        `fract_threshold_to_predict_true`: fraction of relevant structures that favor true classification at which True will be predicted, this helps the algorithm avoid either false negatives or false positives when one is significantly preferable over the other  
+    """
+    def __init__(
+        self,
+        decomposition,
+        root_group=None,
+        nodes=None,
+        initial_root_splits=None,
+        n_strucs_min=1,
+        iter_max=2,
+        iter_item_cap=100,
+        fract_nodes_expand_per_iter=0,
+        r=None,
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
+        fract_threshold_to_predict_true=0.5,
+    ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+
+        super().__init__(
+            decomposition=decomposition,
+            root_group=root_group,
+            nodes=nodes,
+            initial_root_splits=initial_root_splits,
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            fract_nodes_expand_per_iter=fract_nodes_expand_per_iter,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            )
+
+        self.fract_threshold_to_predict_true = fract_threshold_to_predict_true
+        self.max_accuracy = 0.0
+
 
 def _assign_depths(node, depth=0):
     node.depth = depth
