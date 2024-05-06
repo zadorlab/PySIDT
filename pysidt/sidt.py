@@ -1228,6 +1228,32 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             parent.items = comp
             parent.rule = comp_rule
 
+    def evaluate(self, mol):
+        """
+        Evaluate tree for a given possibly labeled mol
+        """
+        out = 0.0
+        decomp = self.decomposition(mol)
+        for d in decomp:
+            children = self.root.children
+            node = self.root
+            boo = True
+            while boo:
+                for child in children:
+                    if d.is_subgraph_isomorphic(
+                        child.group, generate_initial_map=True, save_order=True
+                    ):
+                        children = child.children
+                        node = child
+                        break
+                else:
+                    boo = False
+
+            if not node.rule:
+                return False
+                    
+        return True
+
 
 def _assign_depths(node, depth=0):
     node.depth = depth
