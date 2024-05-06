@@ -1293,6 +1293,79 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
 
         return train_acc
         
+    def generate_tree(
+        self,
+        data=None,
+        check_data=True,
+        validation_set=None,
+        max_nodes=None,
+        postpruning_based_on_val=True,
+        root_classification=True,
+    ):
+        """
+        generate nodes for the tree based on the supplied data
+
+        Args:
+            `data`: list of Datum objects to train the tree
+            `check_data`: if True, check that the data is subgraph isomorphic to the root group
+            `validation_set`: list of Datum objects to validate the tree
+            `max_nodes`: maximum number of nodes to generate
+            `postpruning_based_on_val`: if True, regularize the tree based on the validation set
+            `root_classification`: classification to set the root node to
+        """
+        self.root.rule = root_classification
+        self.setup_data(data, check_data=check_data)
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
+        self.val_mae = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+
+        self.validation_set = validation_set
+
+        while True:
+            self.analyze_error()
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            nodes = self.select_nodes()
+            if not nodes:
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
+        
+        if self.validation_set and postpruning_based_on_val:
+            logging.info("Postpruning based on best validation accuracy")
+            nodes_to_remove = []
+            for k in list(self.nodes.keys()):
+                if k not in self.best_tree_nodes:
+                    nodes_to_remove.append(k)
+
+            node_back_mapping = dict()
+            for k in nodes_to_remove:
+                parent = self.nodes[k]
+                while parent.name in nodes_to_remove:
+                    parent = parent.parent
+                node_back_mapping[self.nodes[k]] = parent
+                parent.items.extend(self.nodes[k].items)
+                del self.nodes[k]
+
+            for k, datum in enumerate(self.datums):
+                for i, n in enumerate(self.mol_node_maps[datum]["nodes"]):
+                    if n in node_back_mapping.keys():
+                        self.mol_node_maps[datum]["nodes"][i] = node_back_mapping[n]
+
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
+            for n,node in self.nodes.items():
+                node.rule = self.best_rule_map[n]
+            
 
 def _assign_depths(node, depth=0):
     node.depth = depth
