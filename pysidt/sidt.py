@@ -1254,6 +1254,45 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
                     
         return True
 
+    def analyze_error(self):
+        """
+        compute overall training and validation errors
+        """
+        sidt_train_values = [self.evaluate(d.mol) for d in self.datums]
+        true_train_values = [d.value for d in self.datums]
+        if self.validation_set:
+            sidt_val_values = [self.evaluate(d.mol) for d in self.validation_set]
+            true_val_values = [d.value for d in self.validation_set]
+
+        P,N,PP,PN,TP,FN,FP,TN = analyze_binary_classification(sidt_train_values,true_train_values)
+
+        train_acc = (TP + TN)/(P + N)
+
+        logging.info(f"Training Accuracy: {train_acc}")
+
+        if self.validation_set:
+            P,N,PP,PN,TP,FN,FP,TN = analyze_binary_classification(sidt_val_values,true_val_values)
+    
+            val_acc = (TP + TN)/(P + N)
+    
+            logging.info(f"Validation Accuracy: {val_acc}")
+
+            acc = min(train_acc,val_acc)
+    
+            if acc > self.max_accuracy:
+                self.max_accuracy = acc
+                self.best_tree_nodes = list(self.nodes.keys())
+                self.best_nodes = {k: v for k, v in self.nodes.items()}
+                self.best_mol_node_maps = {
+                        k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
+                        for k, v in self.mol_node_maps.items()
+                    }
+                self.best_rule_map = {name:self.nodes[name].rule for name in self.best_tree_nodes}
+
+        logging.info("# nodes: {}".format(len(self.nodes)))
+
+        return train_acc
+        
 
 def _assign_depths(node, depth=0):
     node.depth = depth
