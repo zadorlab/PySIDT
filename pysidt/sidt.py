@@ -1114,6 +1114,120 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         
         return maxext,new_maxrule,comp_maxrule
     
+    def extend_tree_from_node(self, parent):
+        """
+        Adds a new node to the tree
+        """
+        total_items = parent.items #only give the parent the relevant items that may be important for the classification
+        relevant_items = [] #note that self.datum_truth_map and self.datum_node_map are up to date because we only add one node at a time
+        
+        for k, datum in enumerate(self.datums):
+            boos = self.datum_truth_map[datum]
+            nodes = self.datum_node_map[datum]
+            c = boos.count(False)
+            for i in range(len(nodes)):
+                mol = self.mol_node_maps[datum]["mols"][i]
+                if nodes[i] != parent:
+                    continue
+                elif datum.value:
+                    relevant_items.append(mol)
+                elif not datum.value and c == 0:
+                    relevant_items.append(mol)
+                elif not datum.value and c == 1:
+                    if not boos[i]:
+                        relevant_items.append(mol)
+
+        if not relevant_items:
+            logging.info(f"no relevant items found skipping {parent.name}")
+            self.skip_nodes.append(parent.name)
+            return
+        parent.items = relevant_items
+        logging.info(f"extending node {parent.name}")
+        Nitems = len(relevant_items)
+        logging.info(f"considering {Nitems} relevant items")
+        exts = self.generate_extensions(parent)
+        
+        extlist = [ext[0] for ext in exts]
+        if not extlist:
+            logging.info(f"no extensions generated skipping {parent.name}")
+            self.skip_nodes.append(parent.name)
+            return
+
+        ext,new_rule,comp_rule = self.choose_extension(parent, extlist)
+        
+        assert parent.name != "Root" or ext
+        
+        parent.items = total_items #fix parent.items now that we've picked an extension
+        
+        if ext is None:
+            logging.info(f"no extension selected skipping node {parent.name}")
+            self.skip_nodes.append(parent.name)
+            return
+        
+        new, comp = split_mols(parent.items, ext)
+        ind = extlist.index(ext)
+        grp, grpc, name, typ, indc = exts[ind]
+        
+        node = Node(
+            group=grp,
+            items=new,
+            rule=new_rule,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
+        )
+
+        assert not (name in self.nodes.keys()), name
+
+        self.nodes[name] = node
+        parent.children.append(node)
+        self.new_nodes.append(name)
+
+        for k, datum in enumerate(self.datums):
+            for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                if any(d is x for x in new):
+                    assert d.is_subgraph_isomorphic(
+                        node.group, generate_initial_map=True, save_order=True
+                    )
+                    self.mol_node_maps[datum]["nodes"][i] = node
+
+        logging.info("adding node {}".format(name))
+        
+        if grpc:
+            class_true = 0
+            frags = name.split("_")
+            frags[-1] = "N-" + frags[-1]
+            cextname = ""
+            for k in frags:
+                cextname += k
+                cextname += "_"
+            cextname = cextname[:-1]
+            nodec = Node(
+                group=grpc,
+                items=comp,
+                rule=comp_rule,
+                parent=parent,
+                children=[],
+                name=cextname,
+                depth=parent.depth + 1,
+            )
+
+            self.nodes[cextname] = nodec
+            parent.children.append(nodec)
+            self.new_nodes.append(cextname)
+
+            for k, datum in enumerate(self.datums):
+                for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if any(d is x for x in comp):
+                        assert d.is_subgraph_isomorphic(nodec.group, generate_initial_map=True, save_order=True), (d.to_adjacency_list(),nodec.group.to_adjacency_list())
+                        self.mol_node_maps[datum]["nodes"][i] = nodec
+
+            parent.items = []
+        else:
+            parent.items = comp
+            parent.rule = comp_rule
+
 
 def _assign_depths(node, depth=0):
     node.depth = depth
