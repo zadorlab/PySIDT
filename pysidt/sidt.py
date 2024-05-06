@@ -1057,6 +1057,63 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         else:
             return list(self.nodes.values())
 
+    def choose_extension(self, node, exts):
+        """
+        select best extension based on the negative cross entropy
+        returns a Node object
+        almost always subclassed
+        """
+        maxval = -np.inf
+        maxext = None
+        new_maxrule = None
+        comp_maxrule = None
+        
+        for i,ext in enumerate(exts):
+            new, comp = split_mols(node.items, ext)
+            Nnew = len(new)
+            Ncomp = len(comp)
+            new_class_true = 0
+            comp_class_true = 0
+            for i, datum in enumerate(self.datums):
+                for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if d in new:
+                        new.remove(d)
+                        if datum.value:
+                            new_class_true += 1
+
+                    if d in comp:
+                        comp.remove(d)
+                        if datum.value:
+                            comp_class_true += 1
+
+            assert len(new) == 0
+            assert len(comp) == 0
+            pnew = new_class_true/Nnew
+            pcomp = comp_class_true/Ncomp
+            assert pnew <= 1, pnew
+            assert pcomp <= 1, pcomp
+            if pnew == 0 and pcomp == 0:
+                val = -np.inf
+            elif pnew == 0:
+                val = pcomp*np.log2(pcomp)
+            elif pcomp == 0:
+                val = pnew*np.log2(pnew)
+            else:
+                val = pcomp*np.log2(pcomp) + pnew*np.log2(pnew) #negative cross entropy
+            if val > maxval:
+                maxval = val
+                maxext = ext
+                if pnew >= self.fract_threshold_to_predict_true:
+                    new_maxrule = True
+                else:
+                    new_maxrule = False
+                if pcomp >= self.fract_threshold_to_predict_true:
+                    comp_maxrule = True
+                else:
+                    comp_maxrule = False
+        
+        return maxext,new_maxrule,comp_maxrule
+    
 
 def _assign_depths(node, depth=0):
     node.depth = depth
