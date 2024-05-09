@@ -1,14 +1,7 @@
 # PySIDT
-This repository contains PySIDT, a low-data machine-learning algorithm that predicts chemical properties. PySIDT is a general implementation of the subgraph isomorphic tree generation (SIDT) machine learning algorithm developed in <a href="https://chemrxiv.org/engage/chemrxiv/article-details/62c5c941c79aca239053967e">Johnson and Green 2021</a>. While the algorithm in that work was specific to rate coefficients, this implementation can be applied to predict arbitrary properties. 
+This repository contains PySIDT, a package containing a set of low-data machine-learning algorithms for prediction of chemical properties based on the subgraph isomorphic tree generation (SIDT) approach originally developed in <a href="https://doi.org/10.1039/D3RE00684K">Johnson and Green 2021</a>. 
 
 # Installation from source
-- Install [molecule](https://github.com/ReactionMechanismGenerator/molecule/tree/ts_len_improvements) from source
-    - `git clone https://github.com/ReactionMechanismGenerator/molecule.git`
-    - `cd molecule`
-    - `conda env create -f environment.yml --name=pysidt`
-    - `conda activate pysidt`
-    - `make`
-    - `pip install -e .`
 - Install PySIDT from source
     - `git clone https://github.com/zadorlab/PySIDT.git`
     - `cd PySIDT`
