@@ -6,5 +6,12 @@ This repository contains PySIDT, a package containing a set of low-data machine-
     - `git clone https://github.com/zadorlab/PySIDT.git`
     - `cd PySIDT`
     - `conda activate pysidt`
-    - `conda install pydot`
+    - `pip install -e .`
+
+# Install molecule from source to customize atomtypes
+- Install [molecule](https://github.com/ReactionMechanismGenerator/molecule) from source
+    - `git clone https://github.com/ReactionMechanismGenerator/molecule.git`
+    - `cd molecule`
+    - `conda activate pysidt`
+    - `make`
     - `pip install -e .`
