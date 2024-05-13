@@ -309,6 +309,10 @@ class SubgraphIsomorphicDecisionTree:
                 node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
             else:    
                 node.rule = Rule(value=data_mean, uncertainty=np.var(node_data), num_data=n)
+        
+        for node in self.nodes.values():
+            if node.rule.uncertainty is None:
+                node.rule.uncertainty = node.parent.rule.uncertainty
 
     def evaluate(self, mol):
         """
@@ -889,6 +893,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         
         for node in self.nodes:
             node.rule.uncertainty = self.node_uncertainties[node.name]
+            
+        for node in self.nodes:
+            if node.rule.uncertainty is None:
+                node.rule.uncertainty = node.parent.rule.uncertainty
 
 
     def assign_depths(self):
