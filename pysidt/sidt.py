@@ -839,12 +839,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         logging.info("training MAE: {}".format(np.mean(np.abs(np.array(train_error)))))
 
         if self.validation_set:
-            train_mae = np.mean(np.abs(np.array(train_error)))
-            val_error = [self.evaluate(d.mol) - d.value for d in self.validation_set]
+            val_error = [self.evaluate(d.mol, estimate_uncertainty=False) - d.value for d in self.validation_set]
             val_mae = np.mean(np.abs(np.array(val_error)))
-            max_mae = max(val_mae, train_mae)
-            if max_mae < self.min_val_error:
-                self.min_val_error = max_mae
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
                 self.best_tree_nodes = list(self.nodes.keys())
                 self.check_mol_node_maps()
                 self.bestA = A
@@ -903,7 +901,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         root = self.root
         _assign_depths(root)
 
-    def evaluate(self, mol):
+    def evaluate(self, mol, estimate_uncertainty=True):
         """
         Evaluate tree for a given possibly labeled mol
         """
@@ -914,7 +912,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             children = self.root.children
             node = self.root
             pred += node.rule.value
-            unc += node.rule.uncertainty
+            if estimate_uncertainty:
+                unc += node.rule.uncertainty
             boo = True
             while boo:
                 for child in children:
@@ -924,12 +923,16 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         children = child.children
                         node = child
                         pred += node.rule.value
-                        unc += node.rule.uncertainty
+                        if estimate_uncertainty:
+                            unc += node.rule.uncertainty
                         break
                 else:
                     boo = False
 
-        return pred, np.sqrt(unc)
+        if estimate_uncertainty:
+            return pred, np.sqrt(unc)
+        else:
+            return pred
 
     def descend_node(self, node, only_specific_match=True):
         data_to_add = {child: [] for child in node.children}
