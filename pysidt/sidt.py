@@ -832,7 +832,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.data_delta = preds - y
 
             for i, val in enumerate(clf.coef_):
-                nodes[i].rule = Rule(value=val, num_data=sum(A[:, i]))
+                nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
 
         train_error = [self.evaluate(d.mol, estimate_uncertainty=False) - d.value for d in self.datums]
 
