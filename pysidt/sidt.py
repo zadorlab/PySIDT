@@ -1513,8 +1513,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
                 node.parent.children.remove(node)
                 node.parent.children.extend(node.children)
                 node.parent.items += node.items
-                for n in item_to_delete.children:
-                    n.parent = item_to_delete.parent
+                for n in items_to_delete.children:
+                    n.parent = items_to_delete.parent
                 check_nodes = True
         
         #merge nodes with parents that give same predictions 
