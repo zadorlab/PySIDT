@@ -984,13 +984,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         root = self.root
         _assign_depths(root)
 
-    def evaluate(self, mol, estimate_uncertainty=False):
+    def evaluate(self, mol, estimate_uncertainty=False, trace=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
         pred = 0.0
         unc = 0.0
         decomp = self.decomposition(mol)
+        if trace:
+            tr = []
         for d in decomp:
             children = self.root.children
             node = self.root
@@ -1011,9 +1013,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         break
                 else:
                     boo = False
+            if trace:
+                tr.append(node.name)
 
-        if estimate_uncertainty:
+        if estimate_uncertainty and trace:
+            return pred, tr, np.sqrt(unc)
+        elif estimate_uncertainty:
             return pred, np.sqrt(unc)
+        elif trace:
+            return pred, tr
         else:
             return pred
 
