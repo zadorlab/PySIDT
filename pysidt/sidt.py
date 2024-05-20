@@ -645,7 +645,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     )
                     self.mol_node_maps[datum]["nodes"][i] = node
 
-        print("adding node {}".format(name))
+        logging.info("adding node {}".format(name))
 
         if grpc:
             frags = name.split("_")
