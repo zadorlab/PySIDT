@@ -29,9 +29,14 @@ jobs:
 
       - name: Install packages for testing
         run: |
-          python -m pip install pytest nbmake
-          python -m pip install -e .
+          python -m pip install -e ".[dev]"
 
+      - name: Check formatting
+        run: |
+          black --check .
+          flake8 .
+          isort --check .
+      
       - name: Test PySIDT notebooks
         run: |
           pytest --nbmake IPython/multi_eval_SIDT_example.ipynb
