@@ -1,28 +1,23 @@
+import json
+import logging
+
 from molecule.molecule import Group
 from molecule.quantity import ScalarQuantity
-from pysidt.extensions import split_mols, get_extension_edge
-from pysidt.regularization import simple_regularization
-from pysidt.decomposition import *
-from pysidt.utils import *
 import numpy as np
-import logging
-import json
-from sklearn import linear_model
 import scipy.sparse as sp
+from sklearn import linear_model
+
+from pysidt.decomposition import *
+from pysidt.extensions import get_extension_edge, split_mols
+from pysidt.regularization import simple_regularization
+from pysidt.utils import *
 
 logging.basicConfig(level=logging.INFO)
 
 
 class Node:
     def __init__(
-        self,
-        group=None,
-        items=None,
-        rule=None,
-        parent=None,
-        children=None,
-        name=None,
-        depth=None,
+        self, group=None, items=None, rule=None, parent=None, children=None, name=None, depth=None
     ):
         if items is None:
             items = []
@@ -161,9 +156,9 @@ class SubgraphIsomorphicDecisionTree:
         minext = None
         for ext in exts:
             new, comp = split_mols(node.items, ext)
-            val = np.std([x.value for x in new]) * len(new) + np.std(
-                [x.value for x in comp]
-            ) * len(comp)
+            val = np.std([x.value for x in new]) * len(new) + np.std([x.value for x in comp]) * len(
+                comp
+            )
             if val < minval:
                 minval = val
                 minext = ext
@@ -324,7 +319,7 @@ def to_dict(obj):
         try:
             json.dumps(val)
             out_dict[attr] = val
-        except:
+        except BaseException:
             if isinstance(val, ScalarQuantity):
                 out_dict[attr] = {
                     "class": val.__class__.__name__,
@@ -341,7 +336,7 @@ def to_dict(obj):
 
 def from_dict(d, class_dict=None):
     """construct objects from dictionary
-    
+
     Args:
         d (dict): dictionary describing object, particularly containing a value
                 associated with "class" identifying a string of the class of the object
@@ -382,10 +377,8 @@ def write_nodes(tree, file):
             )  # will work on all rmgmolecule objects, new objects need this method implemented
             try:
                 json.dumps(rule)
-            except:
-                raise ValueError(
-                    f"Could not serialize object {node.rule.__class__.__name__}"
-                )
+            except BaseException:
+                raise ValueError(f"Could not serialize object {node.rule.__class__.__name__}")
 
         nodesdict[node.name] = {
             "group": node.group.to_adjacency_list(),
@@ -620,13 +613,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             for i, datum in enumerate(self.datums):
                 dy = self.data_delta[i] / len(self.mol_node_maps[datum]["mols"])
                 for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                    v = self.node_uncertainties[
-                        self.mol_node_maps[datum]["nodes"][j].name
-                    ]
+                    v = self.node_uncertainties[self.mol_node_maps[datum]["nodes"][j].name]
                     s = sum(
-                        self.node_uncertainties[
-                            self.mol_node_maps[datum]["nodes"][k].name
-                        ]
+                        self.node_uncertainties[self.mol_node_maps[datum]["nodes"][k].name]
                         for k in range(len(self.mol_node_maps[datum]["nodes"]))
                     )
                     if any(d is x for x in new):
@@ -666,10 +655,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.mol_node_maps = dict()
         for datum in self.datums:
             decomp = self.decomposition(datum.mol)
-            self.mol_node_maps[datum] = {
-                "mols": decomp,
-                "nodes": [self.root for d in decomp],
-            }
+            self.mol_node_maps[datum] = {"mols": decomp, "nodes": [self.root for d in decomp]}
 
         if check_data:
             for i, datum in enumerate(self.datums):
@@ -721,9 +707,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             if len(self.nodes) > max_nodes:
                 break
             self.new_nodes = []
-            num = int(
-                max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
-            )
+            num = int(max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes))))
             nodes = self.select_nodes(num=num)
             if not nodes:
                 break
@@ -796,11 +780,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         node = node.parent
 
             clf = linear_model.Lasso(
-                alpha=alpha,
-                fit_intercept=False,
-                tol=1e-4,
-                max_iter=1000000000,
-                selection="random",
+                alpha=alpha, fit_intercept=False, tol=1e-4, max_iter=1000000000, selection="random"
             )
 
             lasso = clf.fit(A, y)
@@ -863,9 +843,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
             )
         else:
-            self.node_uncertainties.update(
-                {node.name: 1.0 for i, node in enumerate(nodes)}
-            )
+            self.node_uncertainties.update({node.name: 1.0 for i, node in enumerate(nodes)})
 
     def assign_depths(self):
         root = self.root
@@ -924,12 +902,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.descend_training_from_top(only_specific_match=False)
 
         simple_regularization(
-            self.nodes["Root"],
-            self.r,
-            self.r_bonds,
-            self.r_un,
-            self.r_site,
-            self.r_morph,
+            self.nodes["Root"], self.r, self.r_bonds, self.r_un, self.r_site, self.r_morph
         )
 
 

@@ -1,8 +1,8 @@
 from pysidt.sidt import (
-    SubgraphIsomorphicDecisionTree,
+    Datum,
     MultiEvalSubgraphIsomorphicDecisionTree,
     Node,
-    Datum,
+    SubgraphIsomorphicDecisionTree,
     read_nodes,
     write_nodes,
 )

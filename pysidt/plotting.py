@@ -1,6 +1,7 @@
+import os
+
 from IPython.display import Image, display
 import pydot
-import os
 
 
 def plot_tree(sidt, images=True):
