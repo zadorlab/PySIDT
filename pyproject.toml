@@ -22,7 +22,7 @@ requires-python = ">=3.7"
 packages = ["pysidt"]
 
 [project.optional-dependencies]
-dev = ["black", "flake8", "isort", "pytest", "nbmake"]
+dev = ["black", "isort", "pytest", "nbmake"]
 
 [project.urls]
 Homepage = "https://github.com/zadorlab/PySIDT"

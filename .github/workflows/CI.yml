@@ -34,7 +34,6 @@ jobs:
       - name: Check formatting
         run: |
           black --check .
-          flake8 .
           isort --check .
       
       - name: Test PySIDT notebooks
