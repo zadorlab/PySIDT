@@ -342,7 +342,7 @@ def to_dict(obj):
     for attr in attrs:
         val = getattr(obj, attr)
 
-        if callable(val) or val == getattr(obj.__class__, attr):
+        if callable(val) or val == getattr(obj.__class__(), attr):
             continue
 
         try:
