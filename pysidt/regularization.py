@@ -1,4 +1,5 @@
 from molecule.molecule.atomtype import ATOMTYPES
+
 from pysidt.utils import data_matches_node
 
 
@@ -51,9 +52,7 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
                     and atm1.atomtype == atm2.atomtype
                     and len(atm1.bonds) == len(atm2.bonds)
                 ):
-                    bdpairs2 = {
-                        (atm, tuple(bd.order)) for atm, bd in atm2.bonds.items()
-                    }
+                    bdpairs2 = {(atm, tuple(bd.order)) for atm, bd in atm2.bonds.items()}
                     if bdpairs == bdpairs2:
                         skip = True
                         indistinguishable.append(i)
@@ -73,10 +72,7 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
                 vals = list(set(atyp) & set(atm1.reg_dim_atm[1]))
                 assert vals != [], "cannot regularize to empty"
                 if all(
-                    [
-                        set(child.group.atoms[i].atomtype) <= set(vals)
-                        for child in node.children
-                    ]
+                    [set(child.group.atoms[i].atomtype) <= set(vals) for child in node.children]
                 ):
                     if not test:
                         atm1.atomtype = vals
@@ -116,11 +112,7 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
                         if not data_matches_node(node, data):
                             atm1.radical_electrons = oldvals
 
-        if (
-            not skip
-            and atm1.reg_dim_site[1] != []
-            and set(atm1.reg_dim_site[1]) != set(atm1.site)
-        ):
+        if not skip and atm1.reg_dim_site[1] != [] and set(atm1.reg_dim_site[1]) != set(atm1.site):
             if len(atm1.site) == 1:
                 pass
             else:
@@ -179,17 +171,11 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
         if (
             not skip
             and atm1.reg_dim_r[1] != []
-            and (
-                "inRing" not in atm1.props.keys()
-                or atm1.reg_dim_r[1][0] != atm1.props["inRing"]
-            )
+            and ("inRing" not in atm1.props.keys() or atm1.reg_dim_r[1][0] != atm1.props["inRing"])
         ):
             if "inRing" not in atm1.props.keys():
                 if all(
-                    [
-                        "inRing" in child.group.atoms[i].props.keys()
-                        for child in node.children
-                    ]
+                    ["inRing" in child.group.atoms[i].props.keys() for child in node.children]
                 ) and all(
                     [
                         child.group.atoms[i].props["inRing"] == atm1.reg_dim_r[1]
