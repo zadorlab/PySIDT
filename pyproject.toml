@@ -21,6 +21,9 @@ requires-python = ">=3.7"
 [tool.setuptools]
 packages = ["pysidt"]
 
+[project.optional-dependencies]
+dev = ["black", "flake8", "isort", "pytest", "nbmake"]
+
 [project.urls]
 Homepage = "https://github.com/zadorlab/PySIDT"
 Issues = "https://github.com/zadorlab/PySIDT/issues"
