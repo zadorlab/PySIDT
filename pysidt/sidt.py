@@ -1432,6 +1432,9 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         self.setup_data(data, check_data=check_data)
         if len(self.nodes) > 1:
             self.descend_training_from_top(only_specific_match=True)
+            for node in self.nodes.values():
+                if node.rule is None:
+                    node.rule = True
         self.val_mae = np.inf
         self.skip_nodes = []
         self.new_nodes = []
