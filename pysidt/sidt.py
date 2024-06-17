@@ -391,7 +391,7 @@ def from_dict(d, class_dict=None):
         object associated with dictionary
     """
     if class_dict is None:
-        class_dict = dict()
+        class_dict = globals()
 
     construct_d = dict()
     for k, v in d.items():
@@ -440,7 +440,7 @@ def write_nodes(tree, file):
         json.dump(nodesdict, f)
 
 
-def read_nodes(file, class_dict=dict()):
+def read_nodes(file, class_dict=None):
     """_summary_
 
     Args:
@@ -451,6 +451,9 @@ def read_nodes(file, class_dict=dict()):
     Returns:
         nodes (list): list of nodes for tree
     """
+    if class_dict is None:
+        class_dict = globals()
+
     with open(file, "r") as f:
         nodesdict = json.load(f)
     nodes = dict()
