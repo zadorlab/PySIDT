@@ -1,5 +1,6 @@
 from molecule.molecule import Group
 from molecule.quantity import ScalarQuantity
+from molecule.kinetics.uncertainties import RateUncertainty
 from pysidt.extensions import split_mols, get_extension_edge
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
@@ -9,8 +10,19 @@ import logging
 import json
 from sklearn import linear_model
 import scipy.sparse as sp
+import scipy
 
 logging.basicConfig(level=logging.INFO)
+
+
+class Rule:
+    def __init__(self, value=None, uncertainty=None, num_data=None):
+        self.value = value
+        self.uncertainty = uncertainty
+        self.num_data = num_data
+
+    def __repr__(self) -> str:
+        return f"Rule(value={self.value}, uncertainty={self.uncertainty}, num_data={self.num_data})"
 
 
 class Node:
@@ -38,7 +50,7 @@ class Node:
         self.depth = depth
 
     def __repr__(self) -> str:
-        return f"{self.name} rule: {self.rule} depth: {self.depth}"
+        return f"Node(name={self.name}, rule={self.rule}, depth={self.depth})"
 
 
 class Datum:
@@ -275,7 +287,7 @@ class SubgraphIsomorphicDecisionTree:
             self.extend_tree_from_node(node)
             node = self.select_node()
 
-    def fit_tree(self, data=None):
+    def fit_tree(self, data=None, confidence_level=0.95):
         """
         fit rule for each node
         """
@@ -288,7 +300,23 @@ class SubgraphIsomorphicDecisionTree:
             if not node.items:
                 logging.info(node.name)
                 raise ValueError
-            node.rule = sum([d.value for d in node.items]) / len(node.items)
+
+            data = [d.value for d in node.items]
+            n = len(data)
+            data_mean = np.mean(data)
+
+            if n > 1:
+                t = scipy.stats.t.ppf((1 + confidence_level) / 2, n - 1)
+                node.rule = Rule(value=data_mean, uncertainty=t * np.std(data) / np.sqrt(n), num_data=n)
+        
+        for node in self.nodes.values():
+
+            data = [d.value for d in node.items]
+            n = len(data)
+            data_mean = np.mean(data)
+
+            if n == 1:
+                node.rule = Rule(value=data_mean, uncertainty=node.parent.rule.uncertainty, num_data=n)
 
     def evaluate(self, mol):
         """
@@ -318,7 +346,7 @@ def to_dict(obj):
     for attr in attrs:
         val = getattr(obj, attr)
 
-        if callable(val) or val == getattr(obj.__class__, attr):
+        if callable(val) or val == getattr(obj.__class__(), attr):
             continue
 
         try:
@@ -333,6 +361,18 @@ def to_dict(obj):
                     "uncertainty": val.uncertainty,
                     "uncertainty_type": val.uncertainty_type,
                 }
+
+            elif isinstance(val, RateUncertainty):
+                out_dict[attr] = {
+                    "class": val.__class__.__name__,
+                    "Tref": val.Tref,
+                    "correlation": val.correlation,
+                    "mu": val.mu,
+                    "var": val.var,
+                    "N": val.N,
+                    "data_mean": val.data_mean,
+                }
+
             else:
                 out_dict[attr] = to_dict(val)
 
@@ -351,7 +391,7 @@ def from_dict(d, class_dict=None):
         object associated with dictionary
     """
     if class_dict is None:
-        class_dict = dict()
+        class_dict = globals()
 
     construct_d = dict()
     for k, v in d.items():
@@ -400,7 +440,7 @@ def write_nodes(tree, file):
         json.dump(nodesdict, f)
 
 
-def read_nodes(file, class_dict=dict()):
+def read_nodes(file, class_dict=None):
     """_summary_
 
     Args:
@@ -411,6 +451,9 @@ def read_nodes(file, class_dict=dict()):
     Returns:
         nodes (list): list of nodes for tree
     """
+    if class_dict is None:
+        class_dict = globals()
+
     with open(file, "r") as f:
         nodesdict = json.load(f)
     nodes = dict()
@@ -430,6 +473,8 @@ def read_nodes(file, class_dict=dict()):
         node.children = [nodes[child] for child in node.children]
         if isinstance(node.rule, dict) and "class" in node.rule.keys():
             node.rule = from_dict(node.rule, class_dict=class_dict)
+        else:
+            node.rule = from_dict({"class": "Rule", "value": node.rule})
 
     return nodes
 
@@ -762,7 +807,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
             self.fit_tree(data=None, check_data=False, alpha=alpha)
 
-    def fit_tree(self, data=None, check_data=True, alpha=0.1):
+    def fit_tree(self, data=None, check_data=True, alpha=0.1, confidence_level=0.95):
         """
         fit rule for each node
         """
@@ -772,7 +817,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         self.fit_rule(alpha=alpha)
 
-        self.estimate_uncertainty()
+        self.estimate_uncertainty(confidence_level=confidence_level)
 
     def fit_rule(self, alpha=0.1):
         max_depth = max([node.depth for node in self.nodes.values()])
@@ -808,19 +853,17 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.data_delta = preds - y
 
             for i, val in enumerate(clf.coef_):
-                nodes[i].rule = val
+                nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
 
-        train_error = [self.evaluate(d.mol) - d.value for d in self.datums]
+        train_error = [self.evaluate(d.mol, estimate_uncertainty=False) - d.value for d in self.datums]
 
         logging.info("training MAE: {}".format(np.mean(np.abs(np.array(train_error)))))
 
         if self.validation_set:
-            train_mae = np.mean(np.abs(np.array(train_error)))
-            val_error = [self.evaluate(d.mol) - d.value for d in self.validation_set]
+            val_error = [self.evaluate(d.mol, estimate_uncertainty=False) - d.value for d in self.validation_set]
             val_mae = np.mean(np.abs(np.array(val_error)))
-            max_mae = max(val_mae, train_mae)
-            if max_mae < self.min_val_error:
-                self.min_val_error = max_mae
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
                 self.best_tree_nodes = list(self.nodes.keys())
                 self.check_mol_node_maps()
                 self.bestA = A
@@ -834,7 +877,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         logging.info("# nodes: {}".format(len(self.nodes)))
 
-    def estimate_uncertainty(self):
+    def estimate_uncertainty(self, confidence_level=0.95):
         nodes = [node for node in self.nodes.values()]
 
         # generate matrix
@@ -848,13 +891,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     if node in nodes:
                         j = nodes.index(node)
                         A[i, j] += 1.0
-                        preds[i] += node.rule
+                        preds[i] += node.rule.value
                     node = node.parent
 
         self.data_delta = preds - y
 
         if A.shape[1] != 1:
-            node_uncertainties = (
+            node_uncertainties = np.sqrt(
                 np.diag(np.linalg.pinv((A.T @ A).toarray()))
                 * (self.data_delta**2).sum()
                 / (len(self.datums) - len(nodes))
@@ -866,21 +909,36 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.node_uncertainties.update(
                 {node.name: 1.0 for i, node in enumerate(nodes)}
             )
+        
+        for node in self.nodes.values():
+            n = node.rule.num_data
+            if n > 1:
+                t = scipy.stats.t.ppf((1 + confidence_level) / 2, n - 1)
+                node.rule.uncertainty = t * self.node_uncertainties[node.name] / np.sqrt(n)
+        
+        for node in self.nodes.values():
+            n = node.rule.num_data
+            if n == 1:
+                node.rule.uncertainty = node.parent.rule.uncertainty
+
 
     def assign_depths(self):
         root = self.root
         _assign_depths(root)
 
-    def evaluate(self, mol):
+    def evaluate(self, mol, estimate_uncertainty=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
-        out = 0.0
+        pred = 0.0
+        unc = 0.0
         decomp = self.decomposition(mol)
         for d in decomp:
             children = self.root.children
             node = self.root
-            out += node.rule
+            pred += node.rule.value
+            if estimate_uncertainty:
+                unc += node.rule.uncertainty ** 2
             boo = True
             while boo:
                 for child in children:
@@ -889,12 +947,17 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     ):
                         children = child.children
                         node = child
-                        out += node.rule
+                        pred += node.rule.value
+                        if estimate_uncertainty:
+                            unc += node.rule.uncertainty ** 2
                         break
                 else:
                     boo = False
 
-        return out
+        if estimate_uncertainty:
+            return pred, np.sqrt(unc)
+        else:
+            return pred
 
     def descend_node(self, node, only_specific_match=True):
         data_to_add = {child: [] for child in node.children}

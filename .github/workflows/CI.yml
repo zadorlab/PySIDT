@@ -32,6 +32,10 @@ jobs:
           python -m pip install pytest nbmake
           python -m pip install -e .
 
+      - name: Test with pytest
+        run: |
+          pytest -v tests/*
+
       - name: Test PySIDT notebooks
         run: |
           pytest --nbmake IPython/multi_eval_SIDT_example.ipynb
