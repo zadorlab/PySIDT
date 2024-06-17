@@ -1,5 +1,6 @@
 from molecule.molecule import Group
 from molecule.quantity import ScalarQuantity
+from molecule.kinetics.uncertainties import RateUncertainty
 from pysidt.extensions import split_mols, get_extension_edge
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
@@ -360,6 +361,18 @@ def to_dict(obj):
                     "uncertainty": val.uncertainty,
                     "uncertainty_type": val.uncertainty_type,
                 }
+
+            elif isinstance(val, RateUncertainty):
+                out_dict[attr] = {
+                    "class": val.__class__.__name__,
+                    "Tref": val.Tref,
+                    "correlation": val.correlation,
+                    "mu": val.mu,
+                    "var": val.var,
+                    "N": val.N,
+                    "data_mean": val.data_mean,
+                }
+
             else:
                 out_dict[attr] = to_dict(val)
 
