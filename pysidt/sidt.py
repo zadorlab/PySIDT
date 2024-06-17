@@ -48,7 +48,7 @@ class Node:
         self.depth = depth
 
     def __repr__(self) -> str:
-        return f"{self.name} rule: {self.rule} depth: {self.depth}"
+        return f"Node(name={self.name}, rule={self.rule}, depth={self.depth})"
 
 
 class Datum:
