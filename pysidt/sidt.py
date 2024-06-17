@@ -9,6 +9,7 @@ import logging
 import json
 from sklearn import linear_model
 import scipy.sparse as sp
+import scipy
 
 logging.basicConfig(level=logging.INFO)
 
