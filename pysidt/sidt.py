@@ -13,6 +13,16 @@ import scipy.sparse as sp
 logging.basicConfig(level=logging.INFO)
 
 
+class Rule:
+    def __init__(self, value=None, uncertainty=None, num_data=None):
+        self.value = value
+        self.uncertainty = uncertainty
+        self.num_data = num_data
+
+    def __repr__(self) -> str:
+        return f"Rule(value={self.value}, uncertainty={self.uncertainty}, num_data={self.num_data})"
+
+
 class Node:
     def __init__(
         self,
