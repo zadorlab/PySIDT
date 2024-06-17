@@ -286,7 +286,7 @@ class SubgraphIsomorphicDecisionTree:
             self.extend_tree_from_node(node)
             node = self.select_node()
 
-    def fit_tree(self, data=None):
+    def fit_tree(self, data=None, confidence_level=0.95):
         """
         fit rule for each node
         """
@@ -299,7 +299,23 @@ class SubgraphIsomorphicDecisionTree:
             if not node.items:
                 logging.info(node.name)
                 raise ValueError
-            node.rule = sum([d.value for d in node.items]) / len(node.items)
+
+            data = [d.value for d in node.items]
+            n = len(data)
+            data_mean = np.mean(data)
+
+            if n > 1:
+                t = scipy.stats.t.ppf((1 + confidence_level) / 2, n - 1)
+                node.rule = Rule(value=data_mean, uncertainty=t * np.std(data) / np.sqrt(n), num_data=n)
+        
+        for node in self.nodes.values():
+
+            data = [d.value for d in node.items]
+            n = len(data)
+            data_mean = np.mean(data)
+
+            if n == 1:
+                node.rule = Rule(value=data_mean, uncertainty=node.parent.rule.uncertainty, num_data=n)
 
     def evaluate(self, mol):
         """
