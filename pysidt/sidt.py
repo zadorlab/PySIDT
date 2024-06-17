@@ -59,7 +59,7 @@ class Datum:
     value can be in any format so long as the rule generation process can handle it
     """
 
-    def __init__(self, mol, value, weight=1) -> None:
+    def __init__(self, mol, value, weight=1.0) -> None:
         self.mol = mol
         self.value = value
         self.weight = weight
