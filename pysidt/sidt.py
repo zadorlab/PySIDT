@@ -473,6 +473,8 @@ def read_nodes(file, class_dict=None):
         node.children = [nodes[child] for child in node.children]
         if isinstance(node.rule, dict) and "class" in node.rule.keys():
             node.rule = from_dict(node.rule, class_dict=class_dict)
+        else:
+            node.rule = from_dict({"class": "Rule", "value": node.rule})
 
     return nodes
 
