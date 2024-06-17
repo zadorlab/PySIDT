@@ -1,0 +1,1 @@
+{"root": {"group": "1 * R u0\n", "rule": 2, "parent": null, "children": ["child"], "name": "root", "depth": null}, "child": {"group": "1 * R u0\n2   R u0\n", "rule": 1, "parent": "root", "children": [], "name": "child", "depth": null}}
