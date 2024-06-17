@@ -3,6 +3,7 @@ from pysidt.sidt import (
     MultiEvalSubgraphIsomorphicDecisionTree,
     Node,
     Datum,
+    Rule,
     read_nodes,
     write_nodes,
 )
