@@ -59,10 +59,11 @@ class Datum:
     value can be in any format so long as the rule generation process can handle it
     """
 
-    def __init__(self, mol, value, weight=1.0) -> None:
+    def __init__(self, mol, value, weight=1.0, uncertainty=0.0) -> None:
         self.mol = mol
         self.value = value
         self.weight = weight
+        self.uncertainty = uncertainty
 
     def __repr__(self) -> str:
         return f"{self.mol.smiles} {self.value}"
@@ -81,6 +82,7 @@ class SubgraphIsomorphicDecisionTree:
         r_un=None,
         r_site=None,
         r_morph=None,
+        uncertainty_prepruning=False,
     ):
         if nodes is None:
             nodes = {}
@@ -103,6 +105,7 @@ class SubgraphIsomorphicDecisionTree:
         self.r_site = r_site
         self.r_morph = r_morph
         self.skip_nodes = []
+        self.uncertainty_prepruning = uncertainty_prepruning
 
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -129,10 +132,15 @@ class SubgraphIsomorphicDecisionTree:
         Picks a node to expand
         """
         for name, node in self.nodes.items():
-            if len(node.items) > 1 and not (node.name in self.skip_nodes):
-                logging.info("Selected node {}".format(node.name))
-                logging.info("Node has {} items".format(len(node.items)))
-                return node
+            if len(node.items) <= 1 or node.name in self.skip_nodes:
+                continue
+
+            if self.uncertainty_prepruning and is_prepruned_by_uncertainty(node):
+                continue
+
+            logging.info("Selected node {}".format(node.name))
+            logging.info("Node has {} items".format(len(node.items)))
+            return node
         else:
             return None
 
@@ -498,6 +506,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_un=None,
         r_site=None,
         r_morph=None,
+        uncertainty_prepruning=False,
     ):
         if nodes is None:
             nodes = dict()
@@ -521,6 +530,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            uncertainty_prepruning=uncertainty_prepruning,
         )
 
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
@@ -539,25 +549,32 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         """
         Picks the nodes with the largest magintude rule values
         """
-        if len(self.nodes) > num:
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node)
+            ]
+        else:
+            selectable_nodes = list(self.nodes.values())
+
+        if len(selectable_nodes) > num:
             rulevals = [
                 self.node_uncertainties[node.name]
                 if len(node.items) > 1
                 and not (node.name in self.new_nodes)
                 and not (node.name in self.skip_nodes)
                 else 0.0
-                for node in self.nodes.values()
+                for node in selectable_nodes
             ]
             inds = np.argsort(rulevals)
             maxinds = inds[-num:]
             nodes = [
                 node
-                for i, node in enumerate(self.nodes.values())
+                for i, node in enumerate(selectable_nodes)
                 if i in maxinds and len(node.items) > 1
             ]
             return nodes
         else:
-            return list(self.nodes.values())
+            return selectable_nodes
 
     def extend_tree_from_node(self, parent):
         """
@@ -1010,3 +1027,7 @@ def _assign_depths(node, depth=0):
     node.depth = depth
     for child in node.children:
         _assign_depths(child, depth=depth + 1)
+
+
+def is_prepruned_by_uncertainty(node):
+    return node.rule.uncertainty <= min(item.uncertainty for item in node.items)
