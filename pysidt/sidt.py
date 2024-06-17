@@ -548,6 +548,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.best_tree_nodes = None
         self.min_val_error = np.inf
         self.assign_depths()
+        self.W = None # weight matrix for weighted least squares
 
     def select_nodes(self, num=1):
         """
@@ -736,6 +737,11 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         self.root.items = out
 
+        weights = np.array([datum.weight for datum in self.datums])
+        weights /= weights.sum()
+        W = sp.csc_matrix(np.diag(weights))
+        self.W = W
+
     def generate_tree(
         self,
         data=None,
@@ -827,8 +833,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         preds = np.zeros(len(self.datums))
         self.node_uncertainties = dict()
 
-        weights = np.array([datum.weight for datum in self.datums])
-        W = np.diag(weights)
+        W = self.W
 
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
@@ -885,8 +890,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     def estimate_uncertainty(self, confidence_level=0.95):
         nodes = [node for node in self.nodes.values()]
 
-        weights = np.array([datum.weight for datum in self.datums])
-        W = np.diag(weights)
+        W = self.W
 
         # generate matrix
         A = sp.csc_matrix((len(self.datums), len(nodes)))
