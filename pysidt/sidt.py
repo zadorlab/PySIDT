@@ -304,7 +304,7 @@ class SubgraphIsomorphicDecisionTree:
 
             data = [d.value for d in node.items]
             n = len(data)
-            data_mean = np.mean(data)
+            data_mean = sum(d.value * d.weight for d in node.items) / sum(d.weight for d in node.items)
 
             if n > 1:
                 t = scipy.stats.t.ppf((1 + confidence_level) / 2, n - 1)
@@ -314,11 +314,10 @@ class SubgraphIsomorphicDecisionTree:
 
             data = [d.value for d in node.items]
             n = len(data)
-            data_mean = np.mean(data)
+            data_mean = sum(d.value * d.weight for d in node.items) / sum(d.weight for d in node.items)
 
             if n == 1:
                 node.rule = Rule(value=data_mean, uncertainty=node.parent.rule.uncertainty, num_data=n)
-            node.rule = sum(d.value * d.weight for d in node.items) / sum(d.weight for d in node.items)
 
     def evaluate(self, mol):
         """
