@@ -75,6 +75,7 @@ class SubgraphIsomorphicDecisionTree:
         self,
         root_group=None,
         nodes=None,
+        initial_root_splits=None,
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
@@ -116,6 +117,12 @@ class SubgraphIsomorphicDecisionTree:
         elif root_group:
             self.root = Node(root_group, name="Root", depth=0)
             self.nodes = {"Root": self.root}
+            if initial_root_splits:
+                for i,grp in enumerate(initial_root_splits):
+                    name = "Root_"+str(i)
+                    n = Node(grp,name=name,depth=1,parent=self.root)
+                    self.root.children.append(n)
+                    self.nodes[name] = n
 
     def load(self, nodes):
         self.nodes = nodes
@@ -289,6 +296,8 @@ class SubgraphIsomorphicDecisionTree:
 
             self.clear_data()
             self.root.items = data[:]
+            if len(self.nodes) > 1:
+                self.descend_training_from_top()
 
         node = self.select_node()
 
@@ -512,6 +521,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         decomposition,
         root_group=None,
         nodes=None,
+        initial_root_splits=None,
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
@@ -537,6 +547,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         super().__init__(
             root_group=root_group,
             nodes=nodes,
+            initial_root_splits=initial_root_splits,
             n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
@@ -555,6 +566,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.datums = None
         self.validation_set = None
         self.best_tree_nodes = None
+        self.best_rule_map = None
         self.min_val_error = np.inf
         self.assign_depths()
         self.W = None # weight matrix for weighted least squares
@@ -779,6 +791,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `alpha`: regularization parameter for Lasso regression
         """
         self.setup_data(data, check_data=check_data)
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
         self.val_mae = np.inf
         self.skip_nodes = []
         self.new_nodes = []
@@ -828,8 +842,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         children_to_remove.append(child)
                 for child in children_to_remove:
                     node.children.remove(child)
-
-            self.fit_tree(data=None, check_data=False, alpha=alpha)
+            for n,node in self.nodes.items():
+                node.rule = self.best_rule_map[n]
 
     def fit_tree(self, data=None, check_data=True, alpha=0.1, confidence_level=0.95):
         """
@@ -891,13 +905,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             if val_mae < self.min_val_error:
                 self.min_val_error = val_mae
                 self.best_tree_nodes = list(self.nodes.keys())
-                self.check_mol_node_maps()
                 self.bestA = A
                 self.best_nodes = {k: v for k, v in self.nodes.items()}
                 self.best_mol_node_maps = {
                     k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
                     for k, v in self.mol_node_maps.items()
                 }
+                self.best_rule_map = {name:self.nodes[name].rule for name in self.best_tree_nodes}
             self.val_mae = val_mae
             logging.info("validation MAE: {}".format(self.val_mae))
 
@@ -1023,6 +1037,529 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.r_morph,
         )
 
+class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
+    """
+    This SIDT class is a multi-evaluation "and" classifier 
+    Every molecular decomposition is evaluated in the tree to True or False
+    If any decomposition is False the input is classified as False, otherwise it is classified as True
+    Note that one can use this as an "or" classifier by flipping the query of interest and the training data (False => True and True => False)
+    Args:
+        `decomposition`: method to decompose a molecule into substructure contributions.
+        `root_group`: root group for the tree
+        `nodes`: dictionary of nodes for the tree
+        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
+        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
+        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
+        `r`: atom types to generate extensions. If None, all atom types will be used.
+        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
+        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_site`: surface sites to generate extensions. If None, [] will be used.
+        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+        `fract_threshold_to_predict_true`: fraction of relevant structures that favor true classification at which True will be predicted, this helps the algorithm avoid either false negatives or false positives when one is significantly preferable over the other  
+    """
+    def __init__(
+        self,
+        decomposition,
+        root_group=None,
+        nodes=None,
+        initial_root_splits=None,
+        n_strucs_min=1,
+        iter_max=2,
+        iter_item_cap=100,
+        fract_nodes_expand_per_iter=0,
+        r=None,
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
+        fract_threshold_to_predict_true=0.5,
+    ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+
+        super().__init__(
+            decomposition=decomposition,
+            root_group=root_group,
+            nodes=nodes,
+            initial_root_splits=initial_root_splits,
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            fract_nodes_expand_per_iter=fract_nodes_expand_per_iter,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            )
+
+        self.fract_threshold_to_predict_true = fract_threshold_to_predict_true
+        self.max_accuracy = 0.0
+
+    def select_nodes(self):
+        """
+        Picks the node with the most decompositions who a change in the decomposition's classification might improve overall classification
+        adding multiple nodes would require the datum map variables to need updated before analyzing what data to split the node over as
+        those maps may change when a node is added
+        """
+        self.datum_truth_map = {datum:[getattr(n,"rule") for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+        self.datum_node_map = {datum:[n for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+        
+        if len(self.nodes) > 1:
+            node_scores = {node.name:0 for node in self.nodes.values()}
+            for k, datum in enumerate(self.datums):
+                boos = self.datum_truth_map[datum]
+                nodes = self.datum_node_map[datum]
+                c = boos.count(False)
+                for i in range(len(nodes)):
+                    if datum.value and c >= 1:
+                        if not boos[i]:
+                            node_scores[nodes[i].name] += 1
+                    elif not datum.value and c == 0:
+                        if boos[i]:
+                            node_scores[nodes[i].name] += 1
+
+            rulevals = [
+                node_scores[node.name]
+                if len(node.items) > 1
+                and not (node.name in self.new_nodes)
+                and not (node.name in self.skip_nodes)
+                else 0.0
+                for node in self.nodes.values()
+            ]
+            inds = np.argsort(rulevals)
+            ind = np.argmax(rulevals)
+            v = np.max(rulevals)
+            node = list(self.nodes.values())[ind]
+            logging.info(f"selected {node.name}")
+            if v == 0:
+                return None
+            else:
+                return [node]
+        else:
+            return list(self.nodes.values())
+
+    def choose_extension(self, node, exts):
+        """
+        select best extension based on the negative cross entropy
+        returns a Node object
+        almost always subclassed
+        """
+        maxval = -np.inf
+        maxext = None
+        new_maxrule = None
+        comp_maxrule = None
+        
+        for i,ext in enumerate(exts):
+            new, comp = split_mols(node.items, ext)
+            Nnew = len(new)
+            Ncomp = len(comp)
+            new_class_true = 0
+            comp_class_true = 0
+            for i, datum in enumerate(self.datums):
+                for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if d in new:
+                        new.remove(d)
+                        if datum.value:
+                            new_class_true += 1
+
+                    if d in comp:
+                        comp.remove(d)
+                        if datum.value:
+                            comp_class_true += 1
+
+            assert len(new) == 0
+            assert len(comp) == 0
+            pnew = new_class_true/Nnew
+            pcomp = comp_class_true/Ncomp
+            assert pnew <= 1, pnew
+            assert pcomp <= 1, pcomp
+            if pnew == 0 and pcomp == 0:
+                val = -np.inf
+            elif pnew == 0:
+                val = pcomp*np.log2(pcomp)
+            elif pcomp == 0:
+                val = pnew*np.log2(pnew)
+            else:
+                val = pcomp*np.log2(pcomp) + pnew*np.log2(pnew) #negative cross entropy
+            if val > maxval:
+                maxval = val
+                maxext = ext
+                if pnew >= self.fract_threshold_to_predict_true:
+                    new_maxrule = True
+                else:
+                    new_maxrule = False
+                if pcomp >= self.fract_threshold_to_predict_true:
+                    comp_maxrule = True
+                else:
+                    comp_maxrule = False
+        
+        return maxext,new_maxrule,comp_maxrule
+    
+    def extend_tree_from_node(self, parent):
+        """
+        Adds a new node to the tree
+        """
+        total_items = parent.items #only give the parent the relevant items that may be important for the classification
+        relevant_items = [] #note that self.datum_truth_map and self.datum_node_map are up to date because we only add one node at a time
+        
+        for k, datum in enumerate(self.datums):
+            boos = self.datum_truth_map[datum]
+            nodes = self.datum_node_map[datum]
+            c = boos.count(False)
+            for i in range(len(nodes)):
+                mol = self.mol_node_maps[datum]["mols"][i]
+                if nodes[i] != parent:
+                    continue
+                elif datum.value:
+                    relevant_items.append(mol)
+                elif not datum.value and c == 0:
+                    relevant_items.append(mol)
+                elif not datum.value and c == 1:
+                    if not boos[i]:
+                        relevant_items.append(mol)
+
+        if not relevant_items:
+            logging.info(f"no relevant items found skipping {parent.name}")
+            self.skip_nodes.append(parent.name)
+            return
+        parent.items = relevant_items
+        logging.info(f"extending node {parent.name}")
+        Nitems = len(relevant_items)
+        logging.info(f"considering {Nitems} relevant items")
+        exts = self.generate_extensions(parent)
+        
+        extlist = [ext[0] for ext in exts]
+        if not extlist:
+            logging.info(f"no extensions generated skipping {parent.name}")
+            self.skip_nodes.append(parent.name)
+            return
+
+        ext,new_rule,comp_rule = self.choose_extension(parent, extlist)
+        
+        assert parent.name != "Root" or ext
+        
+        parent.items = total_items #fix parent.items now that we've picked an extension
+        
+        if ext is None:
+            logging.info(f"no extension selected skipping node {parent.name}")
+            self.skip_nodes.append(parent.name)
+            return
+        
+        new, comp = split_mols(parent.items, ext)
+        ind = extlist.index(ext)
+        grp, grpc, name, typ, indc = exts[ind]
+        
+        node = Node(
+            group=grp,
+            items=new,
+            rule=new_rule,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
+        )
+
+        assert not (name in self.nodes.keys()), name
+
+        self.nodes[name] = node
+        parent.children.append(node)
+        self.new_nodes.append(name)
+
+        for k, datum in enumerate(self.datums):
+            for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                if any(d is x for x in new):
+                    assert d.is_subgraph_isomorphic(
+                        node.group, generate_initial_map=True, save_order=True
+                    )
+                    self.mol_node_maps[datum]["nodes"][i] = node
+
+        logging.info("adding node {}".format(name))
+        
+        if grpc:
+            class_true = 0
+            frags = name.split("_")
+            frags[-1] = "N-" + frags[-1]
+            cextname = ""
+            for k in frags:
+                cextname += k
+                cextname += "_"
+            cextname = cextname[:-1]
+            nodec = Node(
+                group=grpc,
+                items=comp,
+                rule=comp_rule,
+                parent=parent,
+                children=[],
+                name=cextname,
+                depth=parent.depth + 1,
+            )
+
+            self.nodes[cextname] = nodec
+            parent.children.append(nodec)
+            self.new_nodes.append(cextname)
+
+            for k, datum in enumerate(self.datums):
+                for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if any(d is x for x in comp):
+                        assert d.is_subgraph_isomorphic(nodec.group, generate_initial_map=True, save_order=True), (d.to_adjacency_list(),nodec.group.to_adjacency_list())
+                        self.mol_node_maps[datum]["nodes"][i] = nodec
+
+            parent.items = []
+        else:
+            parent.items = comp
+            parent.rule = comp_rule
+
+    def evaluate(self, mol):
+        """
+        Evaluate tree for a given possibly labeled mol
+        """
+        out = 0.0
+        decomp = self.decomposition(mol)
+        for d in decomp:
+            children = self.root.children
+            node = self.root
+            boo = True
+            while boo:
+                for child in children:
+                    if d.is_subgraph_isomorphic(
+                        child.group, generate_initial_map=True, save_order=True
+                    ):
+                        children = child.children
+                        node = child
+                        break
+                else:
+                    boo = False
+
+            if not node.rule:
+                return False
+                    
+        return True
+
+    def analyze_error(self):
+        """
+        compute overall training and validation errors
+        """
+        sidt_train_values = [self.evaluate(d.mol) for d in self.datums]
+        true_train_values = [d.value for d in self.datums]
+        if self.validation_set:
+            sidt_val_values = [self.evaluate(d.mol) for d in self.validation_set]
+            true_val_values = [d.value for d in self.validation_set]
+
+        P,N,PP,PN,TP,FN,FP,TN = analyze_binary_classification(sidt_train_values,true_train_values)
+
+        train_acc = (TP + TN)/(P + N)
+
+        logging.info(f"Training Accuracy: {train_acc}")
+
+        if self.validation_set:
+            P,N,PP,PN,TP,FN,FP,TN = analyze_binary_classification(sidt_val_values,true_val_values)
+    
+            val_acc = (TP + TN)/(P + N)
+    
+            logging.info(f"Validation Accuracy: {val_acc}")
+
+            acc = min(train_acc,val_acc)
+    
+            if acc > self.max_accuracy:
+                self.max_accuracy = acc
+                self.best_tree_nodes = list(self.nodes.keys())
+                self.best_nodes = {k: v for k, v in self.nodes.items()}
+                self.best_mol_node_maps = {
+                        k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
+                        for k, v in self.mol_node_maps.items()
+                    }
+                self.best_rule_map = {name:self.nodes[name].rule for name in self.best_tree_nodes}
+
+        logging.info("# nodes: {}".format(len(self.nodes)))
+
+        return train_acc
+        
+    def generate_tree(
+        self,
+        data=None,
+        check_data=True,
+        validation_set=None,
+        max_nodes=None,
+        postpruning_based_on_val=True,
+        root_classification=True,
+    ):
+        """
+        generate nodes for the tree based on the supplied data
+
+        Args:
+            `data`: list of Datum objects to train the tree
+            `check_data`: if True, check that the data is subgraph isomorphic to the root group
+            `validation_set`: list of Datum objects to validate the tree
+            `max_nodes`: maximum number of nodes to generate
+            `postpruning_based_on_val`: if True, regularize the tree based on the validation set
+            `root_classification`: classification to set the root node to
+        """
+        self.root.rule = root_classification
+        self.setup_data(data, check_data=check_data)
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
+        self.val_mae = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+
+        self.validation_set = validation_set
+
+        while True:
+            self.analyze_error()
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            nodes = self.select_nodes()
+            if not nodes:
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
+        
+        if self.validation_set and postpruning_based_on_val:
+            logging.info("Postpruning based on best validation accuracy")
+            nodes_to_remove = []
+            for k in list(self.nodes.keys()):
+                if k not in self.best_tree_nodes:
+                    nodes_to_remove.append(k)
+
+            node_back_mapping = dict()
+            for k in nodes_to_remove:
+                parent = self.nodes[k]
+                while parent.name in nodes_to_remove:
+                    parent = parent.parent
+                node_back_mapping[self.nodes[k]] = parent
+                parent.items.extend(self.nodes[k].items)
+                del self.nodes[k]
+
+            for k, datum in enumerate(self.datums):
+                for i, n in enumerate(self.mol_node_maps[datum]["nodes"]):
+                    if n in node_back_mapping.keys():
+                        self.mol_node_maps[datum]["nodes"][i] = node_back_mapping[n]
+
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
+            for n,node in self.nodes.items():
+                node.rule = self.best_rule_map[n]
+            
+    def trim_tree(self):
+        """
+        Many of the tree extension sets improve the split, but do not change predictions
+        this function 1) merges nodes with their parents if they can be removed without affecting classifications
+        2) merges nodes with their parents if they do not result in different predictions
+        """
+
+        self.datum_truth_map = {datum:[getattr(n,"rule") for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+        self.datum_node_map = {datum:[n for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
+
+        check_nodes = True
+        while check_nodes:
+            check_nodes = False
+            items_to_delete = []
+            items_to_delete_values = []
+            for name,node in self.nodes.items():
+                if node.rule or node.parent is None:
+                    continue
+                break_loop = False
+                for k, datum in enumerate(self.datums):
+                    boos = self.datum_truth_map[datum]
+                    nodes = self.datum_node_map[datum]
+                    c = boos.count(False)
+                    for i in range(len(nodes)):
+                        if not datum.value and c == 1: #classification at this node matters for proper classification of this training item
+                            break_loop = True
+                            break
+                    if break_loop:
+                        break
+                else:
+                    items_to_delete.append(node)
+                    items_to_delete_values.append(node.items)
+                    
+            if items_to_delete:
+                ind = np.argmin(np.array(items_to_delete_values))
+                node = items_to_delete[ind]
+                logging.info(f"Deleting node {node.name} because unnecessary for classification")
+                node.parent.children.remove(node)
+                node.parent.children.extend(node.children)
+                node.parent.items += node.items
+                for n in item_to_delete.children:
+                    n.parent = item_to_delete.parent
+                check_nodes = True
+        
+        #merge nodes with parents that give same predictions 
+        self.setup_data(data=self.datums)
+        to_delete = []
+        boo = True
+        while boo:
+            temp_to_delete = []
+            for name,node in self.nodes.items():
+                if name in to_delete:
+                    continue
+                if node.parent and node.rule == node.parent.rule:
+                    seen_node = False
+                    for child in node.parent.children:
+                        break_loop = False
+                        if child is node:
+                            seen_node = True
+                            continue
+                        if seen_node:
+                            for k, datum in enumerate(self.datums):
+                                for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                                    if d.is_subgraph_isomorphic(node.group, generate_initial_map=True, save_order=True):
+                                        if all(not d.is_subgraph_isomorphic(c.group, generate_initial_map=True, save_order=True) for c in node.children):
+                                            if d.is_subgraph_isomorphic(child.group, generate_initial_map=True, save_order=True):
+                                                break_loop = True
+                                                break
+                            if break_loop:
+                                break
+                    else:
+                        logging.info(f"Removing node {node.name}")
+
+                        ind = node.parent.children.index(node)
+                        node.parent.children = node.parent.children[:ind] + node.children + node.parent.children[ind+1:]
+                        for n in node.children:
+                            n.parent = node.parent
+                        node.parent.items += node.items
+                        self.analyze_error()
+                            
+                        for k, datum in enumerate(self.datums):
+                            for i, n in enumerate(self.mol_node_maps[datum]["nodes"]):
+                                if n == node:
+                                    assert self.mol_node_maps[datum]["nodes"][i].rule == node.parent.rule
+                                    self.mol_node_maps[datum]["nodes"][i] = node.parent
+                                    
+                        temp_to_delete.append(name)
+            to_delete.extend(temp_to_delete)
+            boo = len(temp_to_delete) > 0 
+            
+        for name in to_delete:
+            del self.nodes[name]
+            
+def analyze_binary_classification(preds,true_values):
+    P = sum(true_values)
+    N = len(preds) - P
+    PP = sum(preds)
+    PN = len(preds) - PP
+    TP = sum([True for i in range(len(preds)) if preds[i] and true_values[i]])
+    FN = sum([True for i in range(len(preds)) if not preds[i] and true_values[i]])
+    FP = sum([True for i in range(len(preds)) if preds[i] and not true_values[i]])
+    TN = sum([True for i in range(len(preds)) if not preds[i] and not true_values[i]])
+    return P,N,PP,PN,TP,FN,FP,TN
 
 def _assign_depths(node, depth=0):
     node.depth = depth
