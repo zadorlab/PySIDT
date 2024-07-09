@@ -11,13 +11,8 @@ from molecule.molecule.molecule import Molecule
 
 def split_mols(data, newgrp):
     """
-    divides the reactions in rxns between the new
-    group structure newgrp and the old structure with
-    label oldlabel
-    returns a list of reactions associated with the new group
-    the list of reactions associated with the old group
-    and a list of the indices of all of the reactions
-    associated with the new group
+    divides the data using the new group structure (newgrp) into those that match the new group structure and those that do not
+    returns a tuple of a list of data subgraph isomorphic to the new group and a list of data that are not
     """
     new = []
     comp = []
