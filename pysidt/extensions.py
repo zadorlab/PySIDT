@@ -11,13 +11,8 @@ from molecule.molecule.molecule import Molecule
 
 def split_mols(data, newgrp):
     """
-    divides the reactions in rxns between the new
-    group structure newgrp and the old structure with
-    label oldlabel
-    returns a list of reactions associated with the new group
-    the list of reactions associated with the old group
-    and a list of the indices of all of the reactions
-    associated with the new group
+    divides the data using the new group structure (newgrp) into those that match the new group structure and those that do not
+    returns a tuple of a list of data subgraph isomorphic to the new group and a list of data that are not
     """
     new = []
     comp = []
@@ -55,13 +50,13 @@ def get_extension_edge(
 ):
     """
     finds the set of all extension groups to parent such that
-    1) the extension group divides the set of reactions under parent
-    2) No generalization of the extension group divides the set of reactions under parent
+    1) the extension group divides the set of items under parent
+    2) No generalization of the extension group divides the set of items under parent
 
-    We find this by generating all possible extensions of the initial group.  Extensions that split reactions are added
-    to the list.  All extensions that do not split reactions and do not create bonds are ignored
+    We find this by generating all possible extensions of the initial group.  Extensions that split items are added
+    to the list.  All extensions that do not split items and do not create bonds are ignored
     (although those that match every reaction are labeled so we don't search them twice).  Those that match
-    all reactions and involve bond creation undergo this process again.
+    all items and involve bond creation undergo this process again.
 
     Principle:  Say you have two elementary changes to a group ext1 and ext2 if applying ext1 and ext2 results in a
     split at least one of ext1 and ext2 must result in a split
@@ -108,7 +103,7 @@ def get_extension_edge(
                 and (typ, indc) not in reg_dict.keys()
             ):
                 # first list is all extensions that match at least one reaction
-                # second is extensions that match all reactions
+                # second is extensions that match all items
                 reg_dict[(typ, indc)] = ([], [])
 
             new, comp = split_mols(parent.items, grp2)
@@ -126,7 +121,7 @@ def get_extension_edge(
             if val != np.inf:
                 out_exts[-1].append(
                     exts[i]
-                )  # this extension splits reactions (optimization dim)
+                )  # this extension splits items (optimization dim)
                 if typ == "atomExt":
                     reg_dict[(typ, indc)][0].extend(grp2.atoms[indc[0]].atomtype)
                 elif typ == "elExt":
@@ -138,7 +133,7 @@ def get_extension_edge(
                         grp2.get_bond(grp2.atoms[indc[0]], grp2.atoms[indc[1]]).order
                     )
 
-            elif boo:  # this extension matches all reactions (regularization dim)
+            elif boo:  # this extension matches all items (regularization dim)
                 if typ == "intNewBondExt" or typ == "extNewBondExt":
                     # these are bond formation extensions, we want to expand these until we get splits
                     ext_inds.append(i)
@@ -162,7 +157,7 @@ def get_extension_edge(
                 elif typ == "ringExt":
                     reg_dict[(typ, indc)][1].append(True)
             else:
-                # this extension matches no reactions
+                # this extension matches no items
                 if typ == "ringExt":
                     reg_dict[(typ, indc)][0].append(False)
                     reg_dict[(typ, indc)][1].append(False)
@@ -304,8 +299,8 @@ def get_extension_edge(
         ):
             iter += 1
             if len(grps[iter]) > iter_item_cap:
-                logging.error(
-                    "Recursion item cap hit not splitting {0} reactions at iter {1} with {2} items".format(
+                logging.info(
+                    "Recursion item cap hit not splitting {0} items at iter {1} with {2} items".format(
                         len(parent.items), iter, len(grps[iter])
                     )
                 )
@@ -317,7 +312,7 @@ def get_extension_edge(
             and len(grps) != iter + 1
             and (any([len(x) > 0 for x in out_exts]) and iter + 1 > iter_max)
         ):
-            logging.error("iter_max achieved terminating early")
+            logging.info("iter_max achieved terminating early")
 
     out = []
     # compile all of the valid extensions together

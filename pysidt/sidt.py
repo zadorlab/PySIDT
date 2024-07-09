@@ -283,9 +283,9 @@ class SubgraphIsomorphicDecisionTree:
                     if not datum.mol.is_subgraph_isomorphic(
                         self.root.group, generate_initial_map=True, save_order=True
                     ):
-                        logging.info("Datum did not match Root node:")
-                        logging.info(datum.mol.to_adjacency_list())
-                        raise ValueError
+                        logging.error("Datum did not match Root node:")
+                        logging.error(datum.mol.to_adjacency_list())
+                        raise ValueError("Datum did not match Root node")
 
             self.clear_data()
             self.root.items = data[:]
@@ -307,8 +307,8 @@ class SubgraphIsomorphicDecisionTree:
 
         for node in self.nodes.values():
             if not node.items:
-                logging.info(node.name)
-                raise ValueError
+                logging.error(node.name)
+                raise ValueError("Node has no data")
 
             data = [d.value for d in node.items]
             n = len(data)
