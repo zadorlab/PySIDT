@@ -307,8 +307,8 @@ class SubgraphIsomorphicDecisionTree:
 
         for node in self.nodes.values():
             if not node.items:
-                logging.info(node.name)
-                raise ValueError
+                logging.error(node.name)
+                raise ValueError("Node has no data")
 
             data = [d.value for d in node.items]
             n = len(data)
