@@ -299,7 +299,7 @@ def get_extension_edge(
         ):
             iter += 1
             if len(grps[iter]) > iter_item_cap:
-                logging.error(
+                logging.info(
                     "Recursion item cap hit not splitting {0} items at iter {1} with {2} items".format(
                         len(parent.items), iter, len(grps[iter])
                     )
@@ -312,7 +312,7 @@ def get_extension_edge(
             and len(grps) != iter + 1
             and (any([len(x) > 0 for x in out_exts]) and iter + 1 > iter_max)
         ):
-            logging.error("iter_max achieved terminating early")
+            logging.info("iter_max achieved terminating early")
 
     out = []
     # compile all of the valid extensions together
