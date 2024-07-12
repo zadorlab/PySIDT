@@ -247,8 +247,8 @@ class SubgraphIsomorphicDecisionTree:
             parent.items = []
         else:
 
-            new_smis = {mol.to_smiles() for mol in new}
-            parent.items = [mol for mol in parent.items if mol.to_smiles() not in new_smis]
+            new_smis = {datum.mol.smiles for datum in new}
+            parent.items = [datum for datum in parent.items if datum.mol.smiles not in new_smis]
 
     def descend_training_from_top(self, only_specific_match=True):
         """
