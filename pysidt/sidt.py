@@ -109,6 +109,7 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
+        self.n_jobs = n_jobs
 
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -245,8 +246,10 @@ class SubgraphIsomorphicDecisionTree:
             parent.children.append(nodec)
             parent.items = []
         else:
-            for mol in new:
-                parent.items.remove(mol)
+            new_smis = set([mol.to_smiles() for mol in new])
+            for mol in list(parent.items):
+                if mol.to_smiles() in new_smis:
+                    parent.items.remove(mol)
 
     def descend_training_from_top(self, only_specific_match=True):
         """
