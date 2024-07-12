@@ -203,7 +203,6 @@ class SubgraphIsomorphicDecisionTree:
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
-            self.skip_nodes.append(parent.name)
             return None
         ext = self.choose_extension(parent, extlist)
         new, comp = split_mols(parent.items, ext)
@@ -308,6 +307,7 @@ class SubgraphIsomorphicDecisionTree:
 
             for out, node in zip(outs, nodes):
                 if out is None:
+                    self.skip_nodes.append(node.name)
                     continue
                 self.add_extension(node, *out)
 
