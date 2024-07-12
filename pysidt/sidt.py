@@ -246,10 +246,9 @@ class SubgraphIsomorphicDecisionTree:
             parent.children.append(nodec)
             parent.items = []
         else:
-            new_smis = set([mol.to_smiles() for mol in new])
-            for mol in list(parent.items):
-                if mol.to_smiles() in new_smis:
-                    parent.items.remove(mol)
+
+            new_smis = {mol.to_smiles() for mol in new}
+            parent.items = [mol for mol in parent.items if mol.to_smiles() not in new_smis]
 
     def descend_training_from_top(self, only_specific_match=True):
         """
