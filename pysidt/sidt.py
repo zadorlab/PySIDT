@@ -11,6 +11,7 @@ import json
 from sklearn import linear_model
 import scipy.sparse as sp
 import scipy
+from joblib import Parallel, delayed
 
 logging.basicConfig(level=logging.INFO)
 
@@ -84,6 +85,7 @@ class SubgraphIsomorphicDecisionTree:
         r_site=None,
         r_morph=None,
         uncertainty_prepruning=False,
+        n_jobs=1,
     ):
         if nodes is None:
             nodes = {}
@@ -107,6 +109,7 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
+        self.n_jobs = n_jobs
 
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -128,10 +131,12 @@ class SubgraphIsomorphicDecisionTree:
         else:
             self.root = None
 
-    def select_node(self):
+    def select_nodes(self):
         """
-        Picks a node to expand
+        Picks nodes to expand
         """
+        nodes = []
+
         for name, node in self.nodes.items():
             if len(node.items) <= 1 or node.name in self.skip_nodes:
                 continue
@@ -141,9 +146,9 @@ class SubgraphIsomorphicDecisionTree:
 
             logging.info("Selected node {}".format(node.name))
             logging.info("Node has {} items".format(len(node.items)))
-            return node
-        else:
-            return None
+            nodes.append(node)
+        
+        return nodes
 
     def generate_extensions(self, node, recursing=False):
         """
@@ -198,12 +203,14 @@ class SubgraphIsomorphicDecisionTree:
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
-            self.skip_nodes.append(parent.name)
-            return
+            return None
         ext = self.choose_extension(parent, extlist)
         new, comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
+        return grp, grpc, name, new, comp
+    
+    def add_extension(self, parent, grp, grpc, name, new, comp):
         logging.info("Choose extension {}".format(name))
 
         node = Node(
@@ -238,8 +245,9 @@ class SubgraphIsomorphicDecisionTree:
             parent.children.append(nodec)
             parent.items = []
         else:
-            for mol in new:
-                parent.items.remove(mol)
+
+            new_smis = {datum.mol.smiles for datum in new}
+            parent.items = [datum for datum in parent.items if datum.mol.smiles not in new_smis]
 
     def descend_training_from_top(self, only_specific_match=True):
         """
@@ -290,11 +298,20 @@ class SubgraphIsomorphicDecisionTree:
             self.clear_data()
             self.root.items = data[:]
 
-        node = self.select_node()
+        nodes = self.select_nodes()
 
-        while node is not None:
-            self.extend_tree_from_node(node)
-            node = self.select_node()
+        while nodes:
+            outs = Parallel(n_jobs=self.n_jobs)(
+                delayed(self.extend_tree_from_node)(node) for node in nodes
+            )
+
+            for out, node in zip(outs, nodes):
+                if out is None:
+                    self.skip_nodes.append(node.name)
+                    continue
+                self.add_extension(node, *out)
+
+            nodes = self.select_nodes()
 
     def fit_tree(self, data=None, confidence_level=0.95):
         """
