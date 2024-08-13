@@ -1125,3 +1125,43 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds):
             )
         )
     return grps
+
+def generate_extensions_reverse(grp,structs):
+    """
+    This function is designed to generate extensions by reverse engineering the structures being split rather than extending the original group
+    This should be a reliable fallback when traditional extension generation becomes to expensive
+    """
+    exts = []
+    for st in structs:
+        new_struct = st.to_group()
+        atoms = new_struct.atoms
+        aexts = []
+        smallest_not_matching_group = None
+        for ind in range(len(st.atoms))[::-1]:
+            old_struct = new_struct
+            new_struct = old_struct.copy(deep=True)
+            at = new_struct.atoms[ind]
+            if at.label: #don't remove any labeled atoms
+                continue
+            new_struct.remove_atom(at)
+            if not new_struct.is_subgraph_isomorphic(grp,generate_initial_map=True,save_order=True): #removing that atom broke isomorphism with original group so don't delete that atom
+                new_struct = old_struct
+                continue
+            else:
+                boos = np.array([item.is_subgraph_isomorphic(new_struct,generate_initial_map=True,save_order=True) for item in structs if item != st])
+                if boos.all(): #suddenly matches all groups...don't remove that atom
+                    new_struct = old_struct
+                    continue
+                elif boos.any(): #splits groups
+                    aexts.append(new_struct)
+                else:
+                    if smallest_not_matching_group is None or len(smallest_not_matching_group.atoms) > len(new_struct.atoms):
+                        smallest_not_matching_group = new_struct
+                    continue
+        if len(aexts):
+            minlen = min([len(g.atoms) for g in aexts])
+            exts.extend([g for g in aexts if len(g.atoms) == minlen])
+        else:
+            exts.append(smallest_not_matching_group)
+
+    return exts

@@ -25,6 +25,9 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
 
     grp = node.group
     data = node.items
+    
+    if grp is None:
+        return
 
     R = Rx[:]
     if ATOMTYPES["X"] in R:
