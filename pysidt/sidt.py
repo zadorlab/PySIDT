@@ -901,7 +901,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         root = self.root
         _assign_depths(root)
 
-    def evaluate(self, mol, estimate_uncertainty=True):
+    def evaluate(self, mol, estimate_uncertainty=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
