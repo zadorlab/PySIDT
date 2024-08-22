@@ -9,8 +9,19 @@ import logging
 import json
 from sklearn import linear_model
 import scipy.sparse as sp
+import scipy
 
 logging.basicConfig(level=logging.INFO)
+
+
+class Rule:
+    def __init__(self, value=None, uncertainty=None, num_data=None):
+        self.value = value
+        self.uncertainty = uncertainty 
+        self.num_data = num_data
+
+    def __repr__(self) -> str:
+        return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data})"
 
 
 class Node:
@@ -288,7 +299,16 @@ class SubgraphIsomorphicDecisionTree:
             if not node.items:
                 logging.info(node.name)
                 raise ValueError
-            node.rule = sum([d.value for d in node.items]) / len(node.items)
+            
+
+            node_data = [d.value for d in node.items]
+            n = len(node_data)
+            data_mean = sum(data) / n
+
+            if n == 1:
+                node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
+            else:    
+                node.rule = Rule(value=data_mean, uncertainty=np.var(node_data), num_data=n)
 
     def evaluate(self, mol):
         """
@@ -808,7 +828,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.data_delta = preds - y
 
             for i, val in enumerate(clf.coef_):
-                nodes[i].rule = val
+                nodes[i].rule = Rule(value=val, num_data=sum(A[:, i]))
 
         train_error = [self.evaluate(d.mol) - d.value for d in self.datums]
 
@@ -848,7 +868,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     if node in nodes:
                         j = nodes.index(node)
                         A[i, j] += 1.0
-                        preds[i] += node.rule
+                        preds[i] += node.rule.value
                     node = node.parent
 
         self.data_delta = preds - y
@@ -866,6 +886,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.node_uncertainties.update(
                 {node.name: 1.0 for i, node in enumerate(nodes)}
             )
+        
+        for node in self.nodes:
+            node.rule.uncertainty = self.node_uncertainties[node.name]
+
 
     def assign_depths(self):
         root = self.root
@@ -875,12 +899,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         """
         Evaluate tree for a given possibly labeled mol
         """
-        out = 0.0
+        pred = 0.0
+        unc = 0.0
         decomp = self.decomposition(mol)
         for d in decomp:
             children = self.root.children
             node = self.root
-            out += node.rule
+            pred += node.rule.value
+            unc += node.rule.uncertainty
             boo = True
             while boo:
                 for child in children:
@@ -889,12 +915,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     ):
                         children = child.children
                         node = child
-                        out += node.rule
+                        pred += node.rule.value
+                        unc += node.rule.uncertainty
                         break
                 else:
                     boo = False
 
-        return out
+        return pred, np.sqrt(unc)
 
     def descend_node(self, node, only_specific_match=True):
         data_to_add = {child: [] for child in node.children}
