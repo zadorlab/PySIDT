@@ -18,11 +18,11 @@ logging.basicConfig(level=logging.INFO)
 class Rule:
     def __init__(self, value=None, uncertainty=None, num_data=None):
         self.value = value
-        self.uncertainty = uncertainty
+        self.uncertainty = uncertainty 
         self.num_data = num_data
 
     def __repr__(self) -> str:
-        return f"Rule(value={self.value}, uncertainty={self.uncertainty}, num_data={self.num_data})"
+        return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data})"
 
 
 class Node:
@@ -309,23 +309,23 @@ class SubgraphIsomorphicDecisionTree:
             if not node.items:
                 logging.info(node.name)
                 raise ValueError
+            
 
-            data = [d.value for d in node.items]
-            n = len(data)
-            data_mean = sum(d.value * d.weight for d in node.items) / sum(d.weight for d in node.items)
-
-            if n > 1:
-                t = scipy.stats.t.ppf((1 + confidence_level) / 2, n - 1)
-                node.rule = Rule(value=data_mean, uncertainty=t * np.std(data) / np.sqrt(n), num_data=n)
+            node_data = [d.value for d in node.items]
+            n = len(node_data)
+            wsum = sum(d.weight for d in node.items)
+            wsq_sum = sum(d.weight**2 for d in node.items)
+            data_mean = sum(d.value * d.weight for d in node.items) / wsum
+            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+            
+            if n == 1:
+                node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
+            else:    
+                node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
         
         for node in self.nodes.values():
-
-            data = [d.value for d in node.items]
-            n = len(data)
-            data_mean = sum(d.value * d.weight for d in node.items) / sum(d.weight for d in node.items)
-
-            if n == 1:
-                node.rule = Rule(value=data_mean, uncertainty=node.parent.rule.uncertainty, num_data=n)
+            if node.rule.uncertainty is None:
+                node.rule.uncertainty = node.parent.rule.uncertainty
 
     def evaluate(self, mol):
         """
@@ -558,6 +558,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.min_val_error = np.inf
         self.assign_depths()
         self.W = None # weight matrix for weighted least squares
+        self.weights = None #weight list for weighted least squares
 
     def select_nodes(self, num=1):
         """
@@ -754,9 +755,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.root.items = out
 
         weights = np.array([datum.weight for datum in self.datums])
-        weights /= weights.sum()
-        W = sp.csc_matrix(np.diag(weights))
-        self.W = W
+        if all(w == 1 for w in weights):
+            self.W = None
+        else:
+            weights /= weights.sum()
+            self.weights = weights
+            W = sp.csc_matrix(np.diag(weights))
+            self.W = W
 
     def generate_tree(
         self,
@@ -848,6 +853,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         y = np.array([datum.value for datum in self.datums])
         preds = np.zeros(len(self.datums))
         self.node_uncertainties = dict()
+        weights = self.weights
+        W = self.W
 
         W = self.W
 
@@ -873,8 +880,11 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 max_iter=1000000000,
                 selection="random",
             )
-
-            lasso = clf.fit(W @ A, W @ y)
+            if weights is not None:
+                lasso = clf.fit(A, y, sample_weight=weights)
+            else:
+                lasso = clf.fit(A, y)
+            
             preds = A * clf.coef_
             self.data_delta = preds - y
 
@@ -906,6 +916,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     def estimate_uncertainty(self, confidence_level=0.95):
         nodes = [node for node in self.nodes.values()]
 
+        weights = self.weights
         W = self.W
 
         # generate matrix
@@ -924,11 +935,20 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         self.data_delta = preds - y
 
-        if A.shape[1] != 1:
-            node_uncertainties = np.sqrt(
+        if A.shape[1] != 1 and W is not None:
+            node_uncertainties = (
                 np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
                 * (self.data_delta**2).sum()
-                / (len(self.datums) - len(nodes))
+                / ((len(self.datums) - len(nodes)))
+            )
+            self.node_uncertainties.update(
+                {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
+            )
+        elif A.shape[1] != 1:
+            node_uncertainties = (
+                np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                * (self.data_delta**2).sum()
+                / ((len(self.datums) - len(nodes)))
             )
             self.node_uncertainties.update(
                 {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
@@ -939,14 +959,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             )
         
         for node in self.nodes.values():
-            n = node.rule.num_data
-            if n > 1:
-                t = scipy.stats.t.ppf((1 + confidence_level) / 2, n - 1)
-                node.rule.uncertainty = t * self.node_uncertainties[node.name] / np.sqrt(n)
-        
+            node.rule.uncertainty = self.node_uncertainties[node.name]
+            
         for node in self.nodes.values():
-            n = node.rule.num_data
-            if n == 1:
+            if node.rule.uncertainty is None:
                 node.rule.uncertainty = node.parent.rule.uncertainty
 
 
@@ -966,7 +982,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             node = self.root
             pred += node.rule.value
             if estimate_uncertainty:
-                unc += node.rule.uncertainty ** 2
+                unc += node.rule.uncertainty
             boo = True
             while boo:
                 for child in children:
@@ -977,7 +993,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         node = child
                         pred += node.rule.value
                         if estimate_uncertainty:
-                            unc += node.rule.uncertainty ** 2
+                            unc += node.rule.uncertainty
                         break
                 else:
                     boo = False
