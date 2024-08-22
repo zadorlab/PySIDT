@@ -59,9 +59,10 @@ class Datum:
     value can be in any format so long as the rule generation process can handle it
     """
 
-    def __init__(self, mol, value):
+    def __init__(self, mol, value, weight=1) -> None:
         self.mol = mol
         self.value = value
+        self.weight = weight
 
     def __repr__(self) -> str:
         return f"{self.mol.smiles} {self.value}"
@@ -303,12 +304,15 @@ class SubgraphIsomorphicDecisionTree:
 
             node_data = [d.value for d in node.items]
             n = len(node_data)
-            data_mean = sum(data) / n
-
+            wsum = sum(d.weight for d in node.items)
+            wsq_sum = sum(d.weight**2 for d in node.items)
+            data_mean = sum(d.value * d.weight for d in node.items) / wsum
+            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+            
             if n == 1:
                 node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
             else:    
-                node.rule = Rule(value=data_mean, uncertainty=np.var(node_data), num_data=n)
+                node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
         
         for node in self.nodes.values():
             if node.rule.uncertainty is None:
@@ -806,7 +810,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         y = np.array([datum.value for datum in self.datums])
         preds = np.zeros(len(self.datums))
         self.node_uncertainties = dict()
-
+        
+        weights = np.array([datum.weight for datum in self.datums])
+        if all(w == 1.0 for w in weights):
+            weights = None
+        else:
+            weights /= weights.sum()
+        
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
 
@@ -829,8 +839,11 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 max_iter=1000000000,
                 selection="random",
             )
-
-            lasso = clf.fit(A, y)
+            if weights is not None:
+                lasso = clf.fit(A, y, sample_weight=weights)
+            else:
+                lasso = clf.fit(A, y)
+            
             preds = A * clf.coef_
             self.data_delta = preds - y
 
@@ -862,6 +875,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     def estimate_uncertainty(self):
         nodes = [node for node in self.nodes.values()]
 
+        weights = np.array([datum.weight for datum in self.datums])
+        if all(w == 1 for w in weights):
+            W = None 
+        else:
+            weights /= weights.sum()
+            W = np.diag(weights)
+
         # generate matrix
         A = sp.csc_matrix((len(self.datums), len(nodes)))
         y = np.array([datum.value for datum in self.datums])
@@ -878,11 +898,20 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         self.data_delta = preds - y
 
-        if A.shape[1] != 1:
+        if A.shape[1] != 1 and W is not None:
+            node_uncertainties = (
+                np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
+                * (self.data_delta**2).sum()
+                / ((len(self.datums) - len(nodes)))
+            )
+            self.node_uncertainties.update(
+                {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
+            )
+        elif A.shape[1] != 1:
             node_uncertainties = (
                 np.diag(np.linalg.pinv((A.T @ A).toarray()))
                 * (self.data_delta**2).sum()
-                / (len(self.datums) - len(nodes))
+                / ((len(self.datums) - len(nodes)))
             )
             self.node_uncertainties.update(
                 {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
