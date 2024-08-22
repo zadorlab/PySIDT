@@ -532,6 +532,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.best_tree_nodes = None
         self.min_val_error = np.inf
         self.assign_depths()
+        self.W = None # weight matrix for weighted least squares
+        self.weights = None #weight list for weighted least squares
 
     def select_nodes(self, num=1):
         """
@@ -720,6 +722,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         self.root.items = out
 
+        weights = np.array([datum.weight for datum in self.datums])
+        if all(w == 1 for w in weights):
+            self.W = None
+        else:
+            weights /= weights.sum()
+            self.weights = weights
+            W = sp.csc_matrix(np.diag(weights))
+            self.W = W
+
     def generate_tree(
         self,
         data=None,
@@ -810,13 +821,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         y = np.array([datum.value for datum in self.datums])
         preds = np.zeros(len(self.datums))
         self.node_uncertainties = dict()
-        
-        weights = np.array([datum.weight for datum in self.datums])
-        if all(w == 1.0 for w in weights):
-            weights = None
-        else:
-            weights /= weights.sum()
-        
+        weights = self.weights
+        W = self.W
+
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
 
@@ -875,12 +882,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     def estimate_uncertainty(self):
         nodes = [node for node in self.nodes.values()]
 
-        weights = np.array([datum.weight for datum in self.datums])
-        if all(w == 1 for w in weights):
-            W = None 
-        else:
-            weights /= weights.sum()
-            W = np.diag(weights)
+        weights = self.weights
+        W = self.W
 
         # generate matrix
         A = sp.csc_matrix((len(self.datums), len(nodes)))
