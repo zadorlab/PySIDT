@@ -16,13 +16,14 @@ logging.basicConfig(level=logging.INFO)
 
 
 class Rule:
-    def __init__(self, value=None, uncertainty=None, num_data=None):
+    def __init__(self, value=None, uncertainty=None, num_data=None, comment=""):
         self.value = value
         self.uncertainty = uncertainty 
         self.num_data = num_data
-
+        self.comment = comment 
+        
     def __repr__(self) -> str:
-        return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data})"
+        return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data}, comment={self.comment})"
 
 
 class Node:
