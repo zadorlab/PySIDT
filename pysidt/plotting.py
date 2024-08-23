@@ -10,14 +10,16 @@ def plot_tree(sidt, images=True, depth=np.inf):
     if not os.path.exists("./tree"):
         os.makedirs("./tree")
     out_nodes = dict()
+    index = -1
     for name, node in sidt.nodes.items():
+        index += 1
         if node.depth <= depth:
             n = pydot.Node(name=name, label=name, fontname="Helvetica", fontsize="16")
-            if images:
-                img = node.group.draw("png")
-                with open("./tree/" + node.name + ".png", "wb") as f:
+            if images and node.group is not None:
+                img = node.group.draw("pdf")
+                with open("./tree/" + str(index) + ".pdf", "wb") as f:
                     f.write(img)
-                n.set_image(os.path.abspath("./tree/" + node.name + ".png"))
+                n.set_image(os.path.abspath("./tree/" + str(index) + ".pdf"))
                 n.set_label(" ")
             graph.add_node(n)
             out_nodes[name] = node
