@@ -528,7 +528,9 @@ def from_dict(d, class_dict=None):
     """
     if class_dict is None:
         class_dict = globals()
-
+    else:
+        class_dict.update(globals())
+    
     construct_d = dict()
     for k, v in d.items():
         if k == "class":
