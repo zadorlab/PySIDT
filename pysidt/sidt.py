@@ -80,12 +80,15 @@ class SubgraphIsomorphicDecisionTree:
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
+        max_batch_size=np.inf,
+        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
         r_site=None,
         r_morph=None,
         uncertainty_prepruning=False,
+        max_nodes=np.inf,
     ):
         if nodes is None:
             nodes = {}
@@ -109,22 +112,96 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
-
+        self.max_batch_size = max_batch_size
+        self.new_fraction_threshold_to_reopt_node = new_fraction_threshold_to_reopt_node
+        self.max_nodes = max_nodes
+        
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
             while node.parent:
                 node = node.parent
             self.root = node
         elif root_group:
-            self.root = Node(root_group, name="Root", depth=0)
-            self.nodes = {"Root": self.root}
-            if initial_root_splits:
-                for i,grp in enumerate(initial_root_splits):
-                    name = "Root_"+str(i)
-                    n = Node(grp,name=name,depth=1,parent=self.root)
-                    self.root.children.append(n)
-                    self.nodes[name] = n
+            if isinstance(root_group,list):
+                self.root = Node(group=None, name="Root", depth=0)
+                roots = []
+                for i,g in enumerate(root_group):
+                    roots.append(Node(group=g, name="Root_"+str(i), parent=self.root, depth=1))
+                self.nodes = {n.name:n for n in roots}
+                self.nodes["Root"] = self.root
+                if initial_root_splits:
+                    raise ValueError("initial_root_splits not compatible with multiple root groups...construct the initial nodes manually")
+            else:
+                self.root = Node(group=root_group, name="Root", depth=0)
+                self.nodes = {"Root": self.root}
+                if initial_root_splits:
+                    for i,grp in enumerate(initial_root_splits):
+                        name = "Root_"+str(i)
+                        n = Node(grp,name=name,depth=1,parent=self.root)
+                        self.root.children.append(n)
+                        self.nodes[name] = n
 
+    def get_batches(self, data, first_batch_include=[]):
+        """
+        Break data up into batches
+
+        Args:
+            data (_type_): _description_
+            first_batch_include (list, optional): _description_. Defaults to [].
+
+        Returns:
+            _type_: _description_
+        """
+        Ndata = len(data)
+        shdata = [d for d in data if d not in first_batch_include]
+        np.random.shuffle(shdata)
+        
+        batch1 = first_batch_include[:]
+        assert len(batch1) < self.max_batch_size
+        batch1.extend(shdata[:self.max_batch_size-len(batch1)])
+        if len(batch1) < self.max_batch_size:
+            return [batch1]
+    
+        shdata = shdata[self.max_batch_size-len(batch1):]
+        batches = [batch1] 
+        N = 0
+        while N+self.max_batch_size < len(shdata):
+            batches.append(shdata[N:N+self.max_batch_size])
+            N += self.max_batch_size
+        batchend = shdata[N:]
+        if len(batchend) != 0:
+            batches.append(batchend)
+        
+        logging.info("Divided {0} Data points into batches: {1}".format(Ndata,[len(x) for x in batches]))
+        return batches
+            
+    def prune(self,newdata):
+        """
+        prunes tree
+        also clears tree as side effect (but desirable anyway when pruning)
+        Args:
+            newdata (_type_): _description_
+        """
+        Nolds = {n:0 for n in self.nodes.keys()}
+        for node in self.nodes.values():
+            Nitems = len(node.items)
+            n = node
+            while n.parent:
+                Nolds[n.name] += Nitems 
+                n = n.parent 
+        self.clear_data()
+        self.root.items = newdata 
+        self.descend_training_from_top(only_specific_match=False)
+        Nnews = {n.name:len(n.items) for n in self.nodes.values}
+        
+        for name,node in self.nodes.items():
+            if node.parent and Nnews[name]/Nolds[name] > self.new_fraction_threshold_to_reopt_node:
+                node.parent.children.remove(node)
+                del self.nodes[name]
+            else:
+                node.group.clear_reg_dims()
+        
+    
     def load(self, nodes):
         self.nodes = nodes
 
@@ -280,33 +357,57 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data=None, check_data=True):
+    def generate_tree(self, data, check_data=True, first_batch_include=[]):
         """
         generate nodes for the tree based on the supplied data
         """
         self.skip_nodes = []
-        if data:
-            if check_data:
-                for datum in data:
-                    if not datum.mol.is_subgraph_isomorphic(
-                        self.root.group, generate_initial_map=True, save_order=True
-                    ):
-                        logging.info("Datum did not match Root node:")
-                        logging.info(datum.mol.to_adjacency_list())
-                        raise ValueError
 
+        if check_data:
+            for datum in data:
+                if not datum.mol.is_subgraph_isomorphic(
+                    self.root.group, generate_initial_map=True, save_order=True
+                ):
+                    logging.info("Datum did not match Root node:")
+                    logging.info(datum.mol.to_adjacency_list())
+                    raise ValueError
+
+        if self.max_batch_size > len(data):
+            batches = [data]
+        else:
+            logging.info("using cascade algorithm")
+            batches = self.get_batches(data,first_batch_include=first_batch_include)
+        
+        data_temp = []
+        for i,batch in enumerate(batches):
+            data_temp += batch
+            if len(batches) > 1:
+                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
+            if i != 0:
+                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
+                self.prune(data)
+                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
             self.clear_data()
-            self.root.items = data[:]
+            self.root.items = data_temp[:]
             if len(self.nodes) > 1:
                 self.descend_training_from_top()
-
-        node = self.select_node()
-
-        while node is not None:
-            self.extend_tree_from_node(node)
+            
             node = self.select_node()
+            while node:
+                if len(self.nodes) > self.max_nodes:
+                    break
+                if not node:
+                    logging.info("Did not find any nodes to expand")
+                    break
+                else:
+                    self.extend_tree_from_node(node)
+                node = self.select_node()
 
-    def fit_tree(self, data=None, confidence_level=0.95):
+            while node is not None:
+                self.extend_tree_from_node(node)
+                node = self.select_node()
+
+    def fit_tree(self, data=None):
         """
         fit rule for each node
         """
