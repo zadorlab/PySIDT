@@ -1,7 +1,7 @@
 from molecule.molecule import Group
 from molecule.quantity import ScalarQuantity
 from molecule.kinetics.uncertainties import RateUncertainty
-from pysidt.extensions import split_mols, get_extension_edge
+from pysidt.extensions import split_mols, get_extension_edge, generate_extensions_reverse
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
 from pysidt.utils import *
@@ -255,6 +255,17 @@ class SubgraphIsomorphicDecisionTree:
             node.group.clear_reg_dims()
             return self.generate_extensions(node, recursing=True)
 
+        if not out:
+            logging.info("forward extension generation failed, using reverse extension generation")
+            grps = generate_extensions_reverse(node.group,node.items)
+            name = node.name+"_Revgen"
+            i = 0
+            while name+str(i) in self.nodes.keys():
+                i += 1
+            
+            return [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None]
+
+        
         return out  # [(grp2, grpc, name, typ, indc)]
 
     def choose_extension(self, node, exts):
