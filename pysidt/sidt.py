@@ -429,8 +429,9 @@ class SubgraphIsomorphicDecisionTree:
 
         for node in self.nodes.values():
             if not node.items:
-                logging.info(node.name)
-                raise ValueError
+                logging.warning(f"Node: {node.name} was empty")
+                node.rule = None 
+                continue
             
 
             node_data = [d.value for d in node.items]
@@ -446,6 +447,10 @@ class SubgraphIsomorphicDecisionTree:
                 node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
         
         for node in self.nodes.values():
+            n = node
+            while n.rule is None:
+                n = n.parent
+            node.rule = n.rule
             if node.rule.uncertainty is None:
                 node.rule.uncertainty = node.parent.rule.uncertainty
 
