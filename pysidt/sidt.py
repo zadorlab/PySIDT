@@ -1507,8 +1507,13 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             depth=parent.depth + 1,
         )
 
-        assert not (name in self.nodes.keys()), name
-
+        if name in self.nodes.keys():
+            name_original = name
+            k = 0
+            while name in self.nodes.keys():
+                name = name_original+"_ident_"+str(k)
+                k += 1
+        
         self.nodes[name] = node
         parent.children.append(node)
         self.new_nodes.append(name)
