@@ -1611,6 +1611,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             sidt_val_values = [self.evaluate(d.mol) for d in self.validation_set]
             true_val_values = [d.value for d in self.validation_set]
 
+        if self.test_set:
+            sidt_test_values = [self.evaluate(d.mol) for d in self.test_set]
+            true_test_values = [d.value for d in self.test_set]
+            
         P,N,PP,PN,TP,FN,FP,TN = analyze_binary_classification(sidt_train_values,true_train_values)
 
         train_acc = (TP + TN)/(P + N)
@@ -1624,9 +1628,17 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
     
             logging.info(f"Validation Accuracy: {val_acc}")
 
+            if self.test_set:
+                P,N,PP,PN,TP,FN,FP,TN = analyze_binary_classification(sidt_test_values,true_test_values)
+    
+                test_acc = (TP + TN)/(P + N)
+        
+                logging.info(f"Test Accuracy: {test_acc}")
+            
             acc = min(train_acc,val_acc)
     
             if acc > self.max_accuracy:
+                logging.info(f"Identifying new best tree with min(train,val) accuracy {acc}")
                 self.max_accuracy = acc
                 self.best_tree_nodes = list(self.nodes.keys())
                 self.best_nodes = {k: v for k, v in self.nodes.items()}
