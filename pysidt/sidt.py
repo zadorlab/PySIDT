@@ -1299,6 +1299,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         iter_max=2,
         iter_item_cap=100,
         fract_nodes_expand_per_iter=0,
+        max_batch_size=np.inf,
+        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -1326,6 +1328,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
             fract_nodes_expand_per_iter=fract_nodes_expand_per_iter,
+            max_batch_size=max_batch_size,
+            new_fraction_threshold_to_reopt_node=new_fraction_threshold_to_reopt_node,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -1336,6 +1340,11 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         self.fract_threshold_to_predict_true = fract_threshold_to_predict_true
         self.max_accuracy = 0.0
 
+        if initial_root_splits:
+            for node in self.nodes.values():
+                if node.rule is None:
+                    node.rule = True
+        
     def select_nodes(self):
         """
         Picks the node with the most decompositions who a change in the decomposition's classification might improve overall classification
@@ -1344,7 +1353,6 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         """
         self.datum_truth_map = {datum:[getattr(n,"rule") for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
         self.datum_node_map = {datum:[n for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
-        
         if len(self.nodes) > 1:
             node_scores = {node.name:0 for node in self.nodes.values()}
             for k, datum in enumerate(self.datums):
@@ -1358,7 +1366,6 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
                     elif not datum.value and c == 0:
                         if boos[i]:
                             node_scores[nodes[i].name] += 1
-
             rulevals = [
                 node_scores[node.name]
                 if len(node.items) > 1
@@ -1617,12 +1624,15 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         
     def generate_tree(
         self,
-        data=None,
+        data,
         check_data=True,
         validation_set=None,
+        test_set=None,
         max_nodes=None,
         postpruning_based_on_val=True,
         root_classification=True,
+        max_skip_node_clears=1,
+        first_batch_include=[],
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -1636,29 +1646,53 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             `root_classification`: classification to set the root node to
         """
         self.root.rule = root_classification
-        self.setup_data(data, check_data=check_data)
-        if len(self.nodes) > 1:
-            self.descend_training_from_top(only_specific_match=True)
-            for node in self.nodes.values():
-                if node.rule is None:
-                    node.rule = True
-        self.val_mae = np.inf
-        self.skip_nodes = []
-        self.new_nodes = []
-
-        self.validation_set = validation_set
-
-        while True:
-            self.analyze_error()
-            if len(self.nodes) > max_nodes:
-                break
+        
+        if self.max_batch_size > len(data):
+            batches = [data]
+        else:
+            logging.info("using cascade algorithm, generating batches")
+            batches = self.get_batches(data,first_batch_include=first_batch_include)
+        data = []
+        for i,batch in enumerate(batches):
+            data += batch
+            if len(batches) > 1:
+                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
+            if i != 0:
+                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
+                self.prune(data)
+                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
+            
+            self.setup_data(data, check_data=check_data)
+            if len(self.nodes) > 1:
+                self.descend_training_from_top(only_specific_match=True)
+                for node in self.nodes.values():
+                    if node.rule is None:
+                        node.rule = True
+            self.val_mae = np.inf
+            self.skip_nodes = []
             self.new_nodes = []
-            nodes = self.select_nodes()
-            if not nodes:
-                break
-            else:
-                for node in nodes:
-                    self.extend_tree_from_node(node)
+
+            self.validation_set = validation_set
+            self.test_set = test_set
+            num_skip_node_clears = 0
+            while True:
+                self.analyze_error()
+                if len(self.nodes) > max_nodes:
+                    break
+                self.new_nodes = []
+                nodes = self.select_nodes()
+                if not nodes:
+                    if self.skip_nodes and num_skip_node_clears < max_skip_node_clears:
+                        logging.info("Clearing skip_nodes")
+                        num_skip_node_clears += 1
+                        self.skip_nodes = []
+                        continue
+                    
+                    logging.info("no selected nodes, terminating...")
+                    break
+                else:
+                    for node in nodes:
+                        self.extend_tree_from_node(node)
         
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation accuracy")
