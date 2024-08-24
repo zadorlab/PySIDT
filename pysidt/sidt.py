@@ -619,21 +619,7 @@ def read_nodes(file, class_dict=None):
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     """
-    Makes prediction for a molecule based on multiple evaluations.
-
-    Args:
-        `decomposition`: method to decompose a molecule into substructure contributions.
-        `root_group`: root group for the tree
-        `nodes`: dictionary of nodes for the tree
-        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
-        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
-        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
-        `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
-        `r`: atom types to generate extensions. If None, all atom types will be used.
-        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
-        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
-        `r_site`: surface sites to generate extensions. If None, [] will be used.
-        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+    Base class for Multi-Evaluation SIDTs
     """
 
     def __init__(
@@ -710,150 +696,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             return self.decomposition(struct)
     
     def select_nodes(self, num=1):
-        """
-        Picks the nodes with the largest magintude rule values
-        """
-        if self.uncertainty_prepruning:
-            selectable_nodes = [
-                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node)
-            ]
-        else:
-            selectable_nodes = list(self.nodes.values())
-
-        if len(selectable_nodes) > num:
-            rulevals = [
-                self.node_uncertainties[node.name]
-                if len(node.items) > 1
-                and not (node.name in self.new_nodes)
-                and not (node.name in self.skip_nodes)
-                else 0.0
-                for node in selectable_nodes
-            ]
-            inds = np.argsort(rulevals)
-            maxinds = inds[-num:]
-            nodes = [
-                node
-                for i, node in enumerate(selectable_nodes)
-                if i in maxinds and len(node.items) > 1 and not np.isnan(rulevals[i])
-            ]
-            return nodes
-        else:
-            return selectable_nodes
-
+        raise NotImplementedError
+    
     def extend_tree_from_node(self, parent):
-        """
-        Adds a new node to the tree
-        """
-        exts = self.generate_extensions(parent)
-        extlist = [ext[0] for ext in exts]
-        if not extlist:
-            self.skip_nodes.append(parent.name)
-            return
-        ext = self.choose_extension(parent, extlist)
-        if ext is None:
-            self.skip_nodes.append(parent.name)
-            return
-        new, comp = split_mols(parent.items, ext)
-        ind = extlist.index(ext)
-        grp, grpc, name, typ, indc = exts[ind]
-
-        node = Node(
-            group=grp,
-            items=new,
-            rule=None,
-            parent=parent,
-            children=[],
-            name=name,
-            depth=parent.depth + 1,
-        )
-
-        assert not (name in self.nodes.keys()), name
-
-        self.nodes[name] = node
-        parent.children.append(node)
-        self.node_uncertainties[name] = self.node_uncertainties[parent.name]
-        self.new_nodes.append(name)
-
-        for k, datum in enumerate(self.datums):
-            for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                if any(d is x for x in new):
-                    assert d.is_subgraph_isomorphic(
-                        node.group, generate_initial_map=True, save_order=True
-                    )
-                    self.mol_node_maps[datum]["nodes"][i] = node
-
-        logging.info("adding node {}".format(name))
-
-        if grpc:
-            frags = name.split("_")
-            frags[-1] = "N-" + frags[-1]
-            cextname = ""
-            for k in frags:
-                cextname += k
-                cextname += "_"
-            cextname = cextname[:-1]
-            nodec = Node(
-                group=grpc,
-                items=comp,
-                rule=None,
-                parent=parent,
-                children=[],
-                name=cextname,
-                depth=parent.depth + 1,
-            )
-
-            self.nodes[cextname] = nodec
-            parent.children.append(nodec)
-            self.node_uncertainties[cextname] = self.node_uncertainties[parent.name]
-            self.new_nodes.append(cextname)
-
-            for k, datum in enumerate(self.datums):
-                for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                    if any(d is x for x in comp):
-                        if d.is_subgraph_isomorphic(
-                            nodec.group, generate_initial_map=True, save_order=True
-                        ):
-                            self.mol_node_maps[datum]["nodes"][i] = nodec
-
-            parent.items = []
-        else:
-            parent.items = comp
+        raise NotImplementedError
 
     def choose_extension(self, node, exts):
-        """
-        select best extension among the set of extensions
-        returns a Node object
-        almost always subclassed
-        """
-        maxval = 0.0
-        maxext = None
-        for ext in exts:
-            new, comp = split_mols(node.items, ext)
-            newval = 0.0
-            compval = 0.0
-            for i, datum in enumerate(self.datums):
-                dy = self.data_delta[i] / len(self.mol_node_maps[datum]["mols"])
-                for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                    v = self.node_uncertainties[
-                        self.mol_node_maps[datum]["nodes"][j].name
-                    ]
-                    s = sum(
-                        self.node_uncertainties[
-                            self.mol_node_maps[datum]["nodes"][k].name
-                        ]
-                        for k in range(len(self.mol_node_maps[datum]["nodes"]))
-                    )
-                    if any(d is x for x in new):
-                        newval += self.data_delta[i] * v / s
-                    elif any(d is x for x in comp):
-                        compval += self.data_delta[i] * v / s
-            val = abs(newval - compval)
-            if val > maxval:
-                maxval = val
-                maxext = ext
-
-        return maxext
-
+        raise NotImplementedError
+    
     def check_mol_node_maps(self):
         for d, v in self.mol_node_maps.items():
             for i, m in enumerate(v["mols"]):
@@ -1186,10 +1036,211 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             elif node.rule.num_data == 0:
                 node.rule.uncertainty = 0.0 #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
 
-
     def assign_depths(self):
         root = self.root
         _assign_depths(root)
+
+    def evaluate(self, mol, trace=False, estimate_uncertainty=False):
+        raise NotImplementedError
+    
+    def descend_node(self, node, only_specific_match=True):
+        data_to_add = {child: [] for child in node.children}
+        for m in node.items:
+            for child in node.children:
+                if m.is_subgraph_isomorphic(
+                    child.group, generate_initial_map=True, save_order=True
+                ):
+                    data_to_add[child].append(m)
+                    break
+
+        for k, datum in enumerate(self.datums):
+            for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                for child in node.children:
+                    if any(d is x for x in data_to_add[child]):
+                        self.mol_node_maps[datum]["nodes"][i] = child
+
+        for child in node.children:
+            for m in data_to_add[child]:
+                child.items.append(m)
+                if only_specific_match:
+                    node.items.remove(m)
+
+    def regularize(self, data=None, check_data=True):
+        if data:
+            self.setup_data(data, check_data=check_data)
+            self.descend_training_from_top(only_specific_match=False)
+
+        simple_regularization(
+            self.nodes["Root"],
+            self.r,
+            self.r_bonds,
+            self.r_un,
+            self.r_site,
+            self.r_morph,
+        )
+
+class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorphicDecisionTree):
+    """
+    Makes prediction for a molecule based on multiple evaluations.
+
+    Args:
+        `decomposition`: method to decompose a molecule into substructure contributions.
+        `root_group`: root group for the tree
+        `nodes`: dictionary of nodes for the tree
+        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
+        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
+        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
+        `r`: atom types to generate extensions. If None, all atom types will be used.
+        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
+        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_site`: surface sites to generate extensions. If None, [] will be used.
+        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+    """
+    def select_nodes(self, num=1):
+        """
+        Picks the nodes with the largest magintude rule values
+        """
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node)
+            ]
+        else:
+            selectable_nodes = list(self.nodes.values())
+
+        if len(selectable_nodes) > num:
+            rulevals = [
+                self.node_uncertainties[node.name]
+                if len(node.items) > 1
+                and not (node.name in self.new_nodes)
+                and not (node.name in self.skip_nodes)
+                else 0.0
+                for node in selectable_nodes
+            ]
+            inds = np.argsort(rulevals)
+            maxinds = inds[-num:]
+            nodes = [
+                node
+                for i, node in enumerate(selectable_nodes)
+                if i in maxinds and len(node.items) > 1 and not np.isnan(rulevals[i])
+            ]
+            return nodes
+        else:
+            return selectable_nodes
+
+    def extend_tree_from_node(self, parent):
+        """
+        Adds a new node to the tree
+        """
+        exts = self.generate_extensions(parent)
+        extlist = [ext[0] for ext in exts]
+        if not extlist:
+            self.skip_nodes.append(parent.name)
+            return
+        ext = self.choose_extension(parent, extlist)
+        if ext is None:
+            self.skip_nodes.append(parent.name)
+            return
+        new, comp = split_mols(parent.items, ext)
+        ind = extlist.index(ext)
+        grp, grpc, name, typ, indc = exts[ind]
+
+        node = Node(
+            group=grp,
+            items=new,
+            rule=None,
+            parent=parent,
+            children=[],
+            name=name,
+            depth=parent.depth + 1,
+        )
+
+        assert not (name in self.nodes.keys()), name
+
+        self.nodes[name] = node
+        parent.children.append(node)
+        self.node_uncertainties[name] = self.node_uncertainties[parent.name]
+        self.new_nodes.append(name)
+
+        for k, datum in enumerate(self.datums):
+            for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                if any(d is x for x in new):
+                    assert d.is_subgraph_isomorphic(
+                        node.group, generate_initial_map=True, save_order=True
+                    )
+                    self.mol_node_maps[datum]["nodes"][i] = node
+
+        logging.info("adding node {}".format(name))
+
+        if grpc:
+            frags = name.split("_")
+            frags[-1] = "N-" + frags[-1]
+            cextname = ""
+            for k in frags:
+                cextname += k
+                cextname += "_"
+            cextname = cextname[:-1]
+            nodec = Node(
+                group=grpc,
+                items=comp,
+                rule=None,
+                parent=parent,
+                children=[],
+                name=cextname,
+                depth=parent.depth + 1,
+            )
+
+            self.nodes[cextname] = nodec
+            parent.children.append(nodec)
+            self.node_uncertainties[cextname] = self.node_uncertainties[parent.name]
+            self.new_nodes.append(cextname)
+
+            for k, datum in enumerate(self.datums):
+                for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if any(d is x for x in comp):
+                        if d.is_subgraph_isomorphic(
+                            nodec.group, generate_initial_map=True, save_order=True
+                        ):
+                            self.mol_node_maps[datum]["nodes"][i] = nodec
+
+            parent.items = []
+        else:
+            parent.items = comp
+
+    def choose_extension(self, node, exts):
+        """
+        select best extension among the set of extensions
+        returns a Node object
+        almost always subclassed
+        """
+        maxval = 0.0
+        maxext = None
+        for ext in exts:
+            new, comp = split_mols(node.items, ext)
+            newval = 0.0
+            compval = 0.0
+            for i, datum in enumerate(self.datums):
+                dy = self.data_delta[i] / len(self.mol_node_maps[datum]["mols"])
+                for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    v = self.node_uncertainties[
+                        self.mol_node_maps[datum]["nodes"][j].name
+                    ]
+                    s = sum(
+                        self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][k].name
+                        ]
+                        for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                    )
+                    if any(d is x for x in new):
+                        newval += self.data_delta[i] * v / s
+                    elif any(d is x for x in comp):
+                        compval += self.data_delta[i] * v / s
+            val = abs(newval - compval)
+            if val > maxval:
+                maxval = val
+                maxext = ext
+
+        return maxext
 
     def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
@@ -1231,42 +1282,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             return pred, tr
         else:
             return pred
-
-    def descend_node(self, node, only_specific_match=True):
-        data_to_add = {child: [] for child in node.children}
-        for m in node.items:
-            for child in node.children:
-                if m.is_subgraph_isomorphic(
-                    child.group, generate_initial_map=True, save_order=True
-                ):
-                    data_to_add[child].append(m)
-                    break
-
-        for k, datum in enumerate(self.datums):
-            for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                for child in node.children:
-                    if any(d is x for x in data_to_add[child]):
-                        self.mol_node_maps[datum]["nodes"][i] = child
-
-        for child in node.children:
-            for m in data_to_add[child]:
-                child.items.append(m)
-                if only_specific_match:
-                    node.items.remove(m)
-
-    def regularize(self, data=None, check_data=True):
-        if data:
-            self.setup_data(data, check_data=check_data)
-            self.descend_training_from_top(only_specific_match=False)
-
-        simple_regularization(
-            self.nodes["Root"],
-            self.r,
-            self.r_bonds,
-            self.r_un,
-            self.r_site,
-            self.r_morph,
-        )
 
 class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
     """
