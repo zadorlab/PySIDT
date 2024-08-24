@@ -646,6 +646,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         iter_max=2,
         iter_item_cap=100,
         fract_nodes_expand_per_iter=0,
+        max_batch_size=np.inf,
+        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -671,6 +673,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
+            max_batch_size=max_batch_size,
+            new_fraction_threshold_to_reopt_node=new_fraction_threshold_to_reopt_node,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -691,6 +695,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.best_tree_nodes = None
         self.best_rule_map = None
         self.min_val_error = np.inf
+        self.uncertainties_valid = True
         self.assign_depths()
         self.W = None # weight matrix for weighted least squares
         self.weights = None #weight list for weighted least squares
@@ -805,10 +810,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             for k, datum in enumerate(self.datums):
                 for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
                     if any(d is x for x in comp):
-                        assert d.is_subgraph_isomorphic(
+                        if d.is_subgraph_isomorphic(
                             nodec.group, generate_initial_map=True, save_order=True
-                        )
-                        self.mol_node_maps[datum]["nodes"][i] = nodec
+                        ):
+                            self.mol_node_maps[datum]["nodes"][i] = nodec
 
             parent.items = []
         else:
@@ -920,12 +925,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
     def generate_tree(
         self,
-        data=None,
+        data,
         check_data=True,
         validation_set=None,
+        test_set=None,
         max_nodes=None,
         postpruning_based_on_val=True,
         alpha=0.1,
+        first_batch_include=[],
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -938,30 +945,48 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `alpha`: regularization parameter for Lasso regression
         """
-        self.setup_data(data, check_data=check_data)
-        if len(self.nodes) > 1:
-            self.descend_training_from_top(only_specific_match=True)
-        self.val_mae = np.inf
-        self.skip_nodes = []
-        self.new_nodes = []
-
-        self.validation_set = validation_set
-
-        while True:
-            self.fit_tree(alpha=alpha)
-            if len(self.nodes) > max_nodes:
-                break
+        if self.max_batch_size > len(data):
+            batches = [data]
+        else:
+            logging.info("using cascade algorithm")
+            batches = self.get_batches(data,first_batch_include=first_batch_include)
+        data = []
+        for i,batch in enumerate(batches):
+            data += batch
+            if len(batches) > 1:
+                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
+            if i != 0:
+                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
+                self.prune(data)
+                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
+                
+            self.setup_data(data, check_data=check_data)
+            
+            if len(self.nodes) > 1:
+                self.descend_training_from_top(only_specific_match=True)
+            self.val_mae = np.inf
+            self.skip_nodes = []
             self.new_nodes = []
-            num = int(
-                max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
-            )
-            nodes = self.select_nodes(num=num)
-            if not nodes:
-                break
-            else:
-                for node in nodes:
-                    self.extend_tree_from_node(node)
 
+            self.validation_set = validation_set
+            self.test_set = test_set 
+            
+            while True:
+                self.fit_tree(alpha=alpha)
+                if len(self.nodes) > max_nodes:
+                    break
+                self.new_nodes = []
+                num = int(
+                    max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
+                )
+                nodes = self.select_nodes(num=num)
+                if not nodes:
+                    logging.info("Did not find any nodes to expand")
+                    break
+                else:
+                    for node in nodes:
+                        self.extend_tree_from_node(node)
+                
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation error")
             nodes_to_remove = []
@@ -993,7 +1018,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             for n,node in self.nodes.items():
                 node.rule = self.best_rule_map[n]
 
-    def fit_tree(self, data=None, check_data=True, alpha=0.1, confidence_level=0.95):
+    def fit_tree(self, data=None, check_data=True, alpha=0.1):
         """
         fit rule for each node
         """
