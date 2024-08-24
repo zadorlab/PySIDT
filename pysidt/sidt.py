@@ -734,7 +734,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             nodes = [
                 node
                 for i, node in enumerate(selectable_nodes)
-                if i in maxinds and len(node.items) > 1
+                if i in maxinds and len(node.items) > 1 and not np.isnan(rulevals[i])
             ]
             return nodes
         else:
