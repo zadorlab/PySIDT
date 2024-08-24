@@ -679,6 +679,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             uncertainty_prepruning=uncertainty_prepruning,
         )
 
+        if root_group and (isinstance(decomposition,list) or isinstance(root_group,list)):
+            assert len(decomposition) == len(root_group)
+        
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
         self.decomposition = decomposition
         self.mol_submol_node_maps = None
@@ -692,6 +695,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.W = None # weight matrix for weighted least squares
         self.weights = None #weight list for weighted least squares
 
+    def decompose(self,struct):
+        if isinstance(self.decomposition,list):
+            ds = []
+            for d in self.decomposition:
+                ds += d(struct)
+            return ds
+        else:
+            return self.decomposition(struct)
+    
     def select_nodes(self, num=1):
         """
         Picks the nodes with the largest magintude rule values
@@ -862,7 +874,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.datums = data
         self.mol_node_maps = dict()
         for datum in self.datums:
-            decomp = self.decomposition(datum.mol)
+            decomp = self.decompose(datum.mol)
             self.mol_node_maps[datum] = {
                 "mols": decomp,
                 "nodes": [self.root for d in decomp],
@@ -871,12 +883,23 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if check_data:
             for i, datum in enumerate(self.datums):
                 for d in self.mol_node_maps[datum]["mols"]:
-                    if not d.is_subgraph_isomorphic(
-                        self.root.group, generate_initial_map=True, save_order=True
-                    ):
-                        logging.info("Datum Submol did not match Root node:")
-                        logging.info(d.to_adjacency_list())
-                        raise ValueError
+                    if self.root.group:
+                        if not d.is_subgraph_isomorphic(
+                            self.root.group, generate_initial_map=True, save_order=True
+                        ):
+                            logging.info("Datum Submol did not match Root node:")
+                            logging.info(d.to_adjacency_list())
+                            raise ValueError
+                    else:
+                        for root_child in self.root.children:
+                            if d.is_subgraph_isomorphic(
+                                root_child.group, generate_initial_map=True, save_order=True
+                            ):
+                                break
+                        else:
+                            logging.info("Datum Submol did not match Root nodes:")
+                            logging.info(d.to_adjacency_list())
+                            raise ValueError
 
         self.clear_data()
         out = []
@@ -1104,13 +1127,13 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         root = self.root
         _assign_depths(root)
 
-    def evaluate(self, mol, estimate_uncertainty=False, trace=False):
+    def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
         pred = 0.0
         unc = 0.0
-        decomp = self.decomposition(mol)
+        decomp = self.decompose(mol)
         if trace:
             tr = []
         for d in decomp:
@@ -1137,7 +1160,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 tr.append(node.name)
 
         if estimate_uncertainty and trace:
-            return pred, tr, np.sqrt(unc)
+            return pred, np.sqrt(unc), tr
         elif estimate_uncertainty:
             return pred, np.sqrt(unc)
         elif trace:
