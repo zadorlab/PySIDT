@@ -1028,7 +1028,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
 
         self.fit_rule(alpha=alpha)
 
-        self.estimate_uncertainty(confidence_level=confidence_level)
+        self.estimate_uncertainty()
 
     def fit_rule(self, alpha=0.1):
         max_depth = max([node.depth for node in self.nodes.values()])
@@ -1093,9 +1093,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.val_mae = val_mae
             logging.info("validation MAE: {}".format(self.val_mae))
 
+        if self.test_set:
+            test_error = [self.evaluate(d.mol) - d.value for d in self.test_set]
+            test_mae = np.mean(np.abs(np.array(test_error)))
+            logging.info("test MAE: {}".format(test_mae))
+            
         logging.info("# nodes: {}".format(len(self.nodes)))
 
-    def estimate_uncertainty(self, confidence_level=0.95):
+    def estimate_uncertainty(self,rel_node_dof_tolerance=1e-5):
         nodes = [node for node in self.nodes.values()]
 
         weights = self.weights
@@ -1116,25 +1121,57 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     node = node.parent
 
         self.data_delta = preds - y
-
-        if A.shape[1] != 1 and W is not None:
+        rules = [n.rule.value for n in self.nodes.values()]
+        rule_mean = abs(np.mean(rules))
+        atol = rule_mean*rel_node_dof_tolerance
+        self.abs_node_dof_tolerance = atol
+        extra_dofs = len([n for n in rules if abs(n)<atol]) #count node rule values driven to zero by lasso
+        
+        if A.shape[1] != 1 and W is not None and len(self.datums) - len(nodes) + extra_dofs > 0:
             node_uncertainties = (
                 np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
                 * (self.data_delta**2).sum()
-                / ((len(self.datums) - len(nodes)))
+                / ((len(self.datums) - len(nodes) + extra_dofs))
             )
             self.node_uncertainties.update(
                 {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
             )
-        elif A.shape[1] != 1:
+        elif A.shape[1] != 1 and len(self.datums) - len(nodes) + extra_dofs > 0:
             node_uncertainties = (
                 np.diag(np.linalg.pinv((A.T @ A).toarray()))
                 * (self.data_delta**2).sum()
-                / ((len(self.datums) - len(nodes)))
+                / ((len(self.datums) - len(nodes) + extra_dofs))
             )
             self.node_uncertainties.update(
                 {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
             )
+            self.uncertainties_valid = True
+        elif A.shape[1] != 1 and W is not None:
+            logging.warning("too few degrees of freedom cannot compute valid uncertainties")
+            node_uncertainties = (
+                np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
+                * (self.data_delta**2).sum()
+            )
+            self.node_uncertainties.update(
+                {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
+            )
+            self.uncertainties_valid = False
+        elif A.shape[1] != 1:
+            logging.warning("too few degrees of freedom cannot compute valid uncertainties")
+            if W is not None:
+                node_uncertainties = (
+                    np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
+                    * (self.data_delta**2).sum()
+                )
+            else:
+                node_uncertainties = (
+                    np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                    * (self.data_delta**2).sum()
+                )
+            self.node_uncertainties.update(
+                {node.name: node_uncertainties[i] for i, node in enumerate(nodes)}
+            )
+            self.uncertainties_valid = False
         else:
             self.node_uncertainties.update(
                 {node.name: 1.0 for i, node in enumerate(nodes)}
@@ -1146,6 +1183,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         for node in self.nodes.values():
             if node.rule.uncertainty is None:
                 node.rule.uncertainty = node.parent.rule.uncertainty
+            elif node.rule.num_data == 0:
+                node.rule.uncertainty = 0.0 #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
 
 
     def assign_depths(self):
