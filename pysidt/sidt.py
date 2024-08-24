@@ -1556,18 +1556,20 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
                     if any(d is x for x in comp):
                         assert d.is_subgraph_isomorphic(nodec.group, generate_initial_map=True, save_order=True), (d.to_adjacency_list(),nodec.group.to_adjacency_list())
                         self.mol_node_maps[datum]["nodes"][i] = nodec
-
             parent.items = []
         else:
             parent.items = comp
             parent.rule = comp_rule
 
-    def evaluate(self, mol):
+    def evaluate(self, mol, return_decomp=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
         out = 0.0
-        decomp = self.decomposition(mol)
+        decomp = self.decompose(mol)
+        outval = True
+        vs = []
+        ms = []
         for d in decomp:
             children = self.root.children
             node = self.root
@@ -1584,9 +1586,20 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
                     boo = False
 
             if not node.rule:
-                return False
-                    
-        return True
+                if not return_decomp:
+                    return False
+                else:
+                    vs.append(False)
+                    ms.append(d)
+                    outval = False
+
+            elif return_decomp:
+                vs.append(True)
+                ms.append(d)
+        if return_decomp:
+            return outval,ms,vs 
+        else:
+            return outval
 
     def analyze_error(self):
         """
