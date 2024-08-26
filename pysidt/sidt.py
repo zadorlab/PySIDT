@@ -564,16 +564,24 @@ def write_nodes(tree, file):
                 raise ValueError(
                     f"Could not serialize object {node.rule.__class__.__name__}"
                 )
-
-        nodesdict[node.name] = {
-            "group": node.group.to_adjacency_list(),
-            "rule": rule,
-            "parent": p,
-            "children": [x.name for x in node.children],
-            "name": node.name,
-            "depth": node.depth,
-        }
-
+        if node.group is not None:
+            nodesdict[node.name] = {
+                "group": node.group.to_adjacency_list(),
+                "rule": rule,
+                "parent": p,
+                "children": [x.name for x in node.children],
+                "name": node.name,
+                "depth": node.depth,
+            }
+        else:
+            nodesdict[node.name] = {
+                "group": None,
+                "rule": rule,
+                "parent": p,
+                "children": [x.name for x in node.children],
+                "name": node.name,
+                "depth": node.depth,
+            }
     with open(file, "w") as f:
         json.dump(nodesdict, f)
 
