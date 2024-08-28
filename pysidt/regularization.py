@@ -1,6 +1,6 @@
 from molecule.molecule.atomtype import ATOMTYPES
 from pysidt.utils import data_matches_node
-
+import itertools
 
 def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
     """
@@ -20,9 +20,59 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
     to generate the tree and test=False is ok if the cascade algorithm
     wasn't used.
     """
+    child_map = []
     for child in node.children:
+        #recursively regularize child
         simple_regularization(child, Rx, Rbonds, Run, Rsite, Rmorph)
-
+        
+        #generate atom map to children
+        if node.group is not None:
+            keys = []
+            atms = []
+            initial_map = dict()
+            for atom in child.group.atoms:
+                if atom.label and atom.label != '':
+                    L = [a for a in node.group.atoms if a.label == atom.label]
+                    if L == []:
+                        return False
+                    elif len(L) == 1:
+                        initial_map[atom] = L[0]
+                    else:
+                        keys.append(atom)
+                        atms.append(L)
+            if atms:
+                for atmlist in itertools.product(*atms):
+                    if len(set(atmlist)) != len(atmlist):
+                        # skip entries that map multiple graph atoms to the same subgraph atom
+                        continue
+                    for i, key in enumerate(keys):
+                        initial_map[key] = atmlist[i]
+                    if child.group.is_mapping_valid(node.group, initial_map, equivalent=False):
+                        isos = child.group.find_subgraph_isomorphisms(node.group, initial_map, save_order=True)
+                        if len(isos) > 0:
+                            def isomorph_sort_key(d):
+                                val = 0
+                                for k,v in d.items():
+                                    if node.group.atoms.index(v) == child.group.atoms.index(k):
+                                        val += 1
+                                return -val
+                            child_map.append({v:k for k,v in sorted(isos,key=isomorph_sort_key)[0].items()})
+                            break
+                else:
+                    raise ValueError(f"Could not find valid mapping between parent {node.name} and child {child.name}")
+            else:
+                isos = child.group.find_subgraph_isomorphisms(node.group, initial_map, save_order=True)
+                def isomorph_sort_key(d):
+                    val = 0
+                    for k,v in d.items():
+                        if node.group.atoms.index(v) == child.group.atoms.index(k):
+                            val += 1
+                    return -val
+                child_map.append({v:k for k,v in sorted(isos,key=isomorph_sort_key)[0].items()})
+        
+    if node.group is None: #skip None nodes
+        return
+    
     grp = node.group
     data = node.items
     
@@ -77,8 +127,8 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
                 assert vals != [], "cannot regularize to empty"
                 if all(
                     [
-                        set(child.group.atoms[i].atomtype) <= set(vals)
-                        for child in node.children
+                        set(child_map[q][node.group.atoms[i]].atomtype) <= set(vals)
+                        for q,child in enumerate(node.children)
                     ]
                 ):
                     if not test:
@@ -105,10 +155,10 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
 
                 if all(
                     [
-                        set(child.group.atoms[i].radical_electrons) <= set(vals)
-                        if child.group.atoms[i].radical_electrons != []
+                        set(child_map[q][node.group.atoms[i]].radical_electrons) <= set(vals)
+                        if child_map[q][node.group.atoms[i]].radical_electrons != []
                         else False
-                        for child in node.children
+                        for q,child in enumerate(node.children)
                     ]
                 ):
                     if not test:
@@ -135,10 +185,10 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
 
                 if all(
                     [
-                        set(child.group.atoms[i].site) <= set(vals)
-                        if child.group.atoms[i].site != []
+                        set(child_map[q][node.group.atoms[i]].site) <= set(vals)
+                        if child_map[q][node.group.atoms[i]].site != []
                         else False
-                        for child in node.children
+                        for q,child in enumerate(node.children)
                     ]
                 ):
                     if not test:
@@ -165,10 +215,10 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
 
                 if all(
                     [
-                        set(child.group.atoms[i].morphology) <= set(vals)
-                        if child.group.atoms[i].morphology != []
+                        set(child_map[q][node.group.atoms[i]].morphology) <= set(vals)
+                        if child_map[q][node.group.atoms[i]].morphology != []
                         else False
-                        for child in node.children
+                        for q,child in enumerate(node.children)
                     ]
                 ):
                     if not test:
@@ -190,13 +240,13 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
             if "inRing" not in atm1.props.keys():
                 if all(
                     [
-                        "inRing" in child.group.atoms[i].props.keys()
-                        for child in node.children
+                        "inRing" in child_map[q][node.group.atoms[i]].props.keys()
+                        for q,child in enumerate(node.children)
                     ]
                 ) and all(
                     [
-                        child.group.atoms[i].props["inRing"] == atm1.reg_dim_r[1]
-                        for child in node.children
+                        child_map[q][node.group.atoms[i]].props["inRing"] == atm1.reg_dim_r[1]
+                        for q,child in enumerate(node.children)
                     ]
                 ):
                     if not test:
@@ -226,11 +276,11 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
                             [
                                 set(
                                     child.group.get_bond(
-                                        child.group.atoms[i], child.group.atoms[j]
+                                        child_map[q][atm1], child_map[q][atm2]
                                     ).order
                                 )
                                 <= set(vals)
-                                for child in node.children
+                                for q,child in enumerate(node.children)
                             ]
                         ):
                             if not test:

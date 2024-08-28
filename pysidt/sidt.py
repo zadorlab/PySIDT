@@ -372,6 +372,8 @@ class SubgraphIsomorphicDecisionTree:
         """
         generate nodes for the tree based on the supplied data
         """
+        self.check_subgraph_isomorphic()
+
         self.skip_nodes = []
 
         if check_data:
@@ -474,6 +476,11 @@ class SubgraphIsomorphicDecisionTree:
 
         return node.rule
 
+    def check_subgraph_isomorphic(self):
+        for node in self.nodes.values():
+            if (node.group is not None) and (node.parent is not None) and (node.parent.group is not None) and not node.group.is_subgraph_isomorphic(node.parent.group, generate_initial_map=True, save_order=True):
+                raise ValueError(f"Tree is not subgraph isomorphic: {node.name} is not subgraph isomorphic to parent {node.parent.name}")
+
 
 def to_dict(obj):
     out_dict = dict()
@@ -564,16 +571,24 @@ def write_nodes(tree, file):
                 raise ValueError(
                     f"Could not serialize object {node.rule.__class__.__name__}"
                 )
-
-        nodesdict[node.name] = {
-            "group": node.group.to_adjacency_list(),
-            "rule": rule,
-            "parent": p,
-            "children": [x.name for x in node.children],
-            "name": node.name,
-            "depth": node.depth,
-        }
-
+        if node.group is not None:
+            nodesdict[node.name] = {
+                "group": node.group.to_adjacency_list(),
+                "rule": rule,
+                "parent": p,
+                "children": [x.name for x in node.children],
+                "name": node.name,
+                "depth": node.depth,
+            }
+        else:
+            nodesdict[node.name] = {
+                "group": None,
+                "rule": rule,
+                "parent": p,
+                "children": [x.name for x in node.children],
+                "name": node.name,
+                "depth": node.depth,
+            }
     with open(file, "w") as f:
         json.dump(nodesdict, f)
 
@@ -795,6 +810,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `alpha`: regularization parameter for Lasso regression
         """
+        self.check_subgraph_isomorphic()
+        
         if self.max_batch_size > len(data):
             batches = [data]
         else:
@@ -1690,6 +1707,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `root_classification`: classification to set the root node to
         """
+        self.check_subgraph_isomorphic()
+        
         self.root.rule = root_classification
         
         if self.max_batch_size > len(data):
