@@ -290,9 +290,26 @@ class SubgraphIsomorphicDecisionTree:
         minext = None
         for ext in exts:
             new, comp = split_mols(node.items, ext)
-            val = np.std([x.value for x in new]) * len(new) + np.std(
+            Lnew = len(new)
+            Lcomp = len(comp)
+            if Lnew  > 1 and Lcomp > 1:
+                val = np.std([x.value for x in new]) * Lnew  + np.std(
                 [x.value for x in comp]
-            ) * len(comp)
+            ) * Lcomp
+            elif Lnew  == 1 and Lcomp == 1:
+                val = 0.0
+            elif Lnew  == 1:
+                val = np.std([x.value for x in comp]) * Lcomp
+            elif Lcomp == 1:
+                val = np.std([x.value for x in new]) * Lnew 
+            else: #did not split?
+                logging.error("group:")
+                logging.error(ext.to_adjacency_list())
+                logging.error("data:")
+                for item in node.items:
+                    logging.error(item.mol.to_adjacency_list())
+                raise ValueError("Generated extension did not split items")
+
             if val < minval:
                 minval = val
                 minext = ext
