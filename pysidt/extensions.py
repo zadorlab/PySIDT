@@ -1132,36 +1132,95 @@ def generate_extensions_reverse(grp,structs):
     This should be a reliable fallback when traditional extension generation becomes to expensive
     """
     exts = []
-    for st in structs:
+    if isinstance(structs[0], Molecule):
+        temp_structs = structs
+    else: #Datum
+        temp_structs = [x.mol for x in structs]
+
+    for st in temp_structs:
         new_struct = st.to_group()
-        atoms = new_struct.atoms
-        aexts = []
-        smallest_not_matching_group = None
-        for ind in range(len(st.atoms))[::-1]:
+        #fix ring membership
+        rc = new_struct.get_relevant_cycles()
+        for atom in new_struct.atoms:
+            atom.props['inRing'] = False
+            for ring in rc:
+                if atom in ring:
+                    atom.props['inRing'] = True
+                    break
+        new,comp = split_mols(temp_structs, new_struct)
+        if len(new) > 0 and len(comp) > 0:
+            aexts = [new_struct]
+            matches = [frozenset([st])]
+        else: #this almost means all structures are duplicates...they likely are
+            aexts = []
+            matches = []
+        st_inds_to_not_remove = []
+        st_inds = list(range(len(st.atoms)))
+        while True:
             old_struct = new_struct
             new_struct = old_struct.copy(deep=True)
+            scores = [score_atom_reverse_extension_generation(new_struct,a) for a in new_struct.atoms]
+            inds = np.argsort(scores)[::-1]
+            ind = None
+            index = 0
+            assert len(st_inds) == len(new_struct.atoms), (len(st_inds),len(new_struct.atoms))
+            while ind is None or st_inds[ind] in st_inds_to_not_remove or scores[ind] == -np.inf:
+                ind = inds[index]
+                index += 1
+                if index == len(inds): #tried every atom
+                    ind = None 
+                    break
+                
+            if ind is None:
+                break
+            
             at = new_struct.atoms[ind]
             if at.label: #don't remove any labeled atoms
+                st_inds_to_not_remove.append(st_inds[ind])
                 continue
             new_struct.remove_atom(at)
-            if not new_struct.is_subgraph_isomorphic(grp,generate_initial_map=True,save_order=True): #removing that atom broke isomorphism with original group so don't delete that atom
+            new_struct.update()
+            
+            if not new_struct.is_subgraph_isomorphic(grp, generate_initial_map=True, save_order=True): #removing that atom broke isomorphism with original group so don't delete that atom
                 new_struct = old_struct
+                st_inds_to_not_remove.append(st_inds[ind])
                 continue
             else:
-                boos = np.array([item.is_subgraph_isomorphic(new_struct,generate_initial_map=True,save_order=True) for item in structs if item != st])
-                if boos.all(): #suddenly matches all groups...don't remove that atom
+                new,comp = split_mols(temp_structs, new_struct)
+                boos = np.array([item.is_subgraph_isomorphic(new_struct, generate_initial_map=True, save_order=True) for item in temp_structs])
+                if len(comp) == 0: #suddenly matches all groups...don't remove that atom
                     new_struct = old_struct
+                    st_inds_to_not_remove.append(st_inds[ind])
                     continue
-                elif boos.any(): #splits groups
+                elif len(comp) > 0 and len(new) > 0: #splits groups
+                    del st_inds[ind]
                     aexts.append(new_struct)
+                    matches.append(frozenset(s for i,s in enumerate(temp_structs) if boos[i]))
                 else:
-                    if smallest_not_matching_group is None or len(smallest_not_matching_group.atoms) > len(new_struct.atoms):
-                        smallest_not_matching_group = new_struct
+                    del st_inds[ind]
                     continue
-        if len(aexts):
-            minlen = min([len(g.atoms) for g in aexts])
-            exts.extend([g for g in aexts if len(g.atoms) == minlen])
-        else:
-            exts.append(smallest_not_matching_group)
+
+        best_split_to_ext = dict()
+        for i,g in enumerate(aexts):
+            sts = matches[i]
+            if sts in best_split_to_ext.keys() and len(best_split_to_ext[sts].atoms) < len(g.atoms):
+                continue
+            else:
+                best_split_to_ext[sts] = g
+
+        exts.extend(list(best_split_to_ext.values()))
+
 
     return exts
+
+def score_atom_reverse_extension_generation(g,atm):
+    s = 0
+    if len(atm.atomtype) == 1 and atm.atomtype[0].label == 'H':
+        s += 1
+    s -= len(atm.bonds)
+    iatm = g.atoms.index(atm)
+    gtemp = g.copy(deep=True)
+    gtemp.remove_atom(gtemp.atoms[iatm])
+    if len(gtemp.split()) > len(g.split()):
+        s -= np.inf
+    return s

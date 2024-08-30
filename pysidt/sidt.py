@@ -265,6 +265,18 @@ class SubgraphIsomorphicDecisionTree:
             
             return [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None]
 
+        if not out:
+            logging.warning(f"Failed to extend Node {node.name} with {len(node.items)} items")
+            logging.warning("node")
+            logging.warning(node.group.to_adjacency_list())
+            logging.warning("Items:")
+            for item in node.items:
+                if isinstance(item, Datum):
+                    logging.warning(item.value)
+                    logging.warning(item.mol.to_adjacency_list())
+                else:
+                    logging.warning(item.to_adjacency_list())
+            return []
         
         return out  # [(grp2, grpc, name, typ, indc)]
 
@@ -278,9 +290,26 @@ class SubgraphIsomorphicDecisionTree:
         minext = None
         for ext in exts:
             new, comp = split_mols(node.items, ext)
-            val = np.std([x.value for x in new]) * len(new) + np.std(
+            Lnew = len(new)
+            Lcomp = len(comp)
+            if Lnew  > 1 and Lcomp > 1:
+                val = np.std([x.value for x in new]) * Lnew  + np.std(
                 [x.value for x in comp]
-            ) * len(comp)
+            ) * Lcomp
+            elif Lnew  == 1 and Lcomp == 1:
+                val = 0.0
+            elif Lnew  == 1:
+                val = np.std([x.value for x in comp]) * Lcomp
+            elif Lcomp == 1:
+                val = np.std([x.value for x in new]) * Lnew 
+            else: #did not split?
+                logging.error("group:")
+                logging.error(ext.to_adjacency_list())
+                logging.error("data:")
+                for item in node.items:
+                    logging.error(item.mol.to_adjacency_list())
+                raise ValueError("Generated extension did not split items")
+
             if val < minval:
                 minval = val
                 minext = ext
@@ -294,6 +323,7 @@ class SubgraphIsomorphicDecisionTree:
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
+            logging.info(f"Skipping node {parent.name}")
             self.skip_nodes.append(parent.name)
             return
         ext = self.choose_extension(parent, extlist)
@@ -406,7 +436,7 @@ class SubgraphIsomorphicDecisionTree:
                 self.descend_training_from_top()
             
             node = self.select_node()
-            while node:
+            while True:
                 if len(self.nodes) > self.max_nodes:
                     break
                 if not node:
@@ -414,10 +444,6 @@ class SubgraphIsomorphicDecisionTree:
                     break
                 else:
                     self.extend_tree_from_node(node)
-                node = self.select_node()
-
-            while node is not None:
-                self.extend_tree_from_node(node)
                 node = self.select_node()
 
     def fit_tree(self, data=None):
@@ -440,8 +466,12 @@ class SubgraphIsomorphicDecisionTree:
             n = len(node_data)
             wsum = sum(d.weight for d in node.items)
             wsq_sum = sum(d.weight**2 for d in node.items)
-            data_mean = sum(d.value * d.weight for d in node.items) / wsum
-            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+            if (wsum - wsq_sum/wsum) > 1e-3: 
+                data_mean = sum(d.value * d.weight for d in node.items) / wsum
+                data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+            else: #primarily if weights are all 1.0
+                data_mean = np.mean(node_data)
+                data_var = np.var(node_data)
             
             if n == 1:
                 node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
