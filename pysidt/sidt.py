@@ -323,6 +323,7 @@ class SubgraphIsomorphicDecisionTree:
         exts = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
+            logging.info(f"Skipping node {parent.name}")
             self.skip_nodes.append(parent.name)
             return
         ext = self.choose_extension(parent, extlist)
