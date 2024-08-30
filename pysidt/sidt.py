@@ -265,6 +265,18 @@ class SubgraphIsomorphicDecisionTree:
             
             return [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None]
 
+        if not out:
+            logging.warning(f"Failed to extend Node {node.name} with {len(node.items)} items")
+            logging.warning("node")
+            logging.warning(node.group.to_adjacency_list())
+            logging.warning("Items:")
+            for item in node.items:
+                if isinstance(item, Datum):
+                    logging.warning(item.value)
+                    logging.warning(item.mol.to_adjacency_list())
+                else:
+                    logging.warning(item.to_adjacency_list())
+            return []
         
         return out  # [(grp2, grpc, name, typ, indc)]
 
