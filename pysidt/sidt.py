@@ -418,7 +418,7 @@ class SubgraphIsomorphicDecisionTree:
                 self.descend_training_from_top()
             
             node = self.select_node()
-            while node:
+            while True:
                 if len(self.nodes) > self.max_nodes:
                     break
                 if not node:
@@ -426,10 +426,6 @@ class SubgraphIsomorphicDecisionTree:
                     break
                 else:
                     self.extend_tree_from_node(node)
-                node = self.select_node()
-
-            while node is not None:
-                self.extend_tree_from_node(node)
                 node = self.select_node()
 
     def fit_tree(self, data=None):
