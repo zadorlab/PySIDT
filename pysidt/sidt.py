@@ -1,6 +1,8 @@
 from molecule.molecule import Group
 from molecule.quantity import ScalarQuantity
 from molecule.kinetics.uncertainties import RateUncertainty
+from molecule.molecule.atomtype import ATOMTYPES
+from molecule.molecule.element import bde_elements
 from pysidt.extensions import split_mols, get_extension_edge, generate_extensions_reverse
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
@@ -92,6 +94,9 @@ class SubgraphIsomorphicDecisionTree:
     ):
         if nodes is None:
             nodes = {}
+        if r is None:
+            r = bde_elements  # set of possible r elements/atoms
+            r = [ATOMTYPES[x] for x in r]
         if r_bonds is None:
             r_bonds = [1, 2, 3, 1.5, 4]
         if r_un is None:
