@@ -397,6 +397,10 @@ class SubgraphIsomorphicDecisionTree:
     def clear_data(self):
         for node in self.nodes.values():
             node.items = []
+    
+    def clear_rules(self):
+        for node in self.nodes.values():
+            node.rule = None
 
     def generate_tree(self, data, check_data=True, first_batch_include=[]):
         """
