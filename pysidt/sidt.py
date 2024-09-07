@@ -1,6 +1,8 @@
 from molecule.molecule import Group
 from molecule.quantity import ScalarQuantity
 from molecule.kinetics.uncertainties import RateUncertainty
+from molecule.molecule.atomtype import ATOMTYPES
+from molecule.molecule.element import bde_elements
 from pysidt.extensions import split_mols, get_extension_edge, generate_extensions_reverse
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
@@ -92,6 +94,9 @@ class SubgraphIsomorphicDecisionTree:
     ):
         if nodes is None:
             nodes = {}
+        if r is None:
+            r = bde_elements  # set of possible r elements/atoms
+            r = [ATOMTYPES[x] for x in r]
         if r_bonds is None:
             r_bonds = [1, 2, 3, 1.5, 4]
         if r_un is None:
@@ -511,6 +516,19 @@ class SubgraphIsomorphicDecisionTree:
             if (node.group is not None) and (node.parent is not None) and (node.parent.group is not None) and not node.group.is_subgraph_isomorphic(node.parent.group, generate_initial_map=True, save_order=True):
                 raise ValueError(f"Tree is not subgraph isomorphic: {node.name} is not subgraph isomorphic to parent {node.parent.name}")
 
+    def regularize(self, data=None, check_data=True):
+        if data:
+            self.setup_data(data, check_data=check_data)
+            self.descend_training_from_top(only_specific_match=False)
+
+        simple_regularization(
+            self.nodes["Root"],
+            self.r,
+            self.r_bonds,
+            self.r_un,
+            self.r_site,
+            self.r_morph,
+        )
 
 def to_dict(obj):
     out_dict = dict()
@@ -1112,19 +1130,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 if only_specific_match:
                     node.items.remove(m)
 
-    def regularize(self, data=None, check_data=True):
-        if data:
-            self.setup_data(data, check_data=check_data)
-            self.descend_training_from_top(only_specific_match=False)
-
-        simple_regularization(
-            self.nodes["Root"],
-            self.r,
-            self.r_bonds,
-            self.r_un,
-            self.r_site,
-            self.r_morph,
-        )
 
 class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorphicDecisionTree):
     """
