@@ -748,6 +748,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.assign_depths()
         self.W = None # weight matrix for weighted least squares
         self.weights = None #weight list for weighted least squares
+        self.validation_set = None
+        self.test_set = None
 
     def decompose(self,struct):
         if isinstance(self.decomposition,list):
