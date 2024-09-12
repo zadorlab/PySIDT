@@ -304,10 +304,17 @@ class SubgraphIsomorphicDecisionTree:
         returns a Node object
         almost always subclassed
         """
+        logging.info(f"Choosing from {len(exts)} extensions")
+        if len(node.items) <= self.max_structures_to_choose_extension:
+            structs = node.items
+        else:
+            logging.info(f"Sampling {self.max_structures_to_choose_extension} structures from {len(node.items)} structures at node {node.name}")
+            structs = np.random.choice(node.items,self.max_structures_to_choose_extension,replace=False)
+            
         minval = np.inf
         minext = None
         for ext in exts:
-            new, comp = split_mols(node.items, ext)
+            new, comp = split_mols(structs, ext)
             Lnew = len(new)
             Lcomp = len(comp)
             if Lnew  > 1 and Lcomp > 1:
@@ -1280,27 +1287,41 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         returns a Node object
         almost always subclassed
         """
+        if len(node.items) <= self.max_structures_to_choose_extension:
+            structs = node.items
+        else:
+            logging.info(f"Sampling {self.max_structures_to_choose_extension} structures from {len(node.items)} structures at node {node.name}")
+            structs = np.random.choice(node.items,self.max_structures_to_choose_extension,replace=False)
+            
         maxval = 0.0
         maxext = None
         for ext in exts:
-            new, comp = split_mols(node.items, ext)
+            new, comp = split_mols(structs, ext)
             newval = 0.0
             compval = 0.0
             for i, datum in enumerate(self.datums):
-                dy = self.data_delta[i] / len(self.mol_node_maps[datum]["mols"])
                 for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                    v = self.node_uncertainties[
-                        self.mol_node_maps[datum]["nodes"][j].name
-                    ]
-                    s = sum(
-                        self.node_uncertainties[
-                            self.mol_node_maps[datum]["nodes"][k].name
-                        ]
-                        for k in range(len(self.mol_node_maps[datum]["nodes"]))
-                    )
                     if any(d is x for x in new):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name
+                        ]
+                        s = sum(
+                            self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ]
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
                         newval += self.data_delta[i] * v / s
                     elif any(d is x for x in comp):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name
+                        ]
+                        s = sum(
+                            self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ]
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
                         compval += self.data_delta[i] * v / s
             val = abs(newval - compval)
             if val > maxval:
@@ -1474,13 +1495,19 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         returns a Node object
         almost always subclassed
         """
+        if len(node.items) <= self.max_structures_to_choose_extension:
+            structs = node.items
+        else:
+            logging.info(f"Sampling {self.max_structures_to_choose_extension} structures from {len(node.items)} structures at node {node.name}")
+            structs = np.random.choice(node.items,self.max_structures_to_choose_extension,replace=False)
+            
         maxval = -np.inf
         maxext = None
         new_maxrule = None
         comp_maxrule = None
         
         for i,ext in enumerate(exts):
-            new, comp = split_mols(node.items, ext)
+            new, comp = split_mols(structs, ext)
             Nnew = len(new)
             Ncomp = len(comp)
             new_class_true = 0
