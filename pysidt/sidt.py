@@ -910,6 +910,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `alpha`: regularization parameter for Lasso regression
         """
         np.random.seed(0)
+        logging.info("Checking starting tree is subgraph isomorphic")
         self.check_subgraph_isomorphic()
         
         if self.max_batch_size > len(data):
@@ -926,9 +927,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 logging.info("pruning tree with {} nodes".format(len(self.nodes)))
                 self.prune(data)
                 logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-                
+            logging.info("setting up data")
             self.setup_data(data, check_data=check_data)
-            
+            logging.info("descending data down the tree")
             if len(self.nodes) > 1:
                 self.descend_training_from_top(only_specific_match=True)
             self.val_mae = np.inf
@@ -939,6 +940,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.test_set = test_set 
             
             while True:
+                logging.info("Fitting Tree")
                 self.fit_tree(alpha=alpha)
                 if len(self.nodes) > max_nodes:
                     break
@@ -946,6 +948,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 num = int(
                     max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
                 )
+                logging.info("selecting nodes")
                 nodes = self.select_nodes(num=num)
                 if not nodes:
                     logging.info("Did not find any nodes to expand")
