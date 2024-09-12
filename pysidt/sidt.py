@@ -366,7 +366,7 @@ class SubgraphIsomorphicDecisionTree:
         """
         Adds a new node to the tree
         """
-        exts = self.generate_extensions(parent)
+        exts,clear_reg_dims = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
             logging.info(f"Skipping node {parent.name}")
@@ -376,6 +376,9 @@ class SubgraphIsomorphicDecisionTree:
         new, comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
+        if clear_reg_dims:
+            grp.clear_reg_dims()
+            grpc.clear_reg_dims()
         logging.info("Choose extension {}".format(name))
 
         node = Node(
@@ -1233,19 +1236,25 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         """
         Adds a new node to the tree
         """
-        exts = self.generate_extensions(parent)
+        logging.info("Generating extensions")
+        exts,clear_reg_dims = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
             self.skip_nodes.append(parent.name)
             return
+        logging.info("choosing extensions")
         ext = self.choose_extension(parent, extlist)
         if ext is None:
             self.skip_nodes.append(parent.name)
             return
+        logging.info("adding extension")
         new, comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
-
+        if clear_reg_dims:
+            grp.clear_reg_dims()
+            grpc.clear_reg_dims()
+            
         node = Node(
             group=grp,
             items=new,
@@ -1616,7 +1625,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         logging.info(f"extending node {parent.name}")
         Nitems = len(relevant_items)
         logging.info(f"considering {Nitems} relevant items")
-        exts = self.generate_extensions(parent)
+        exts,clear_reg_dims = self.generate_extensions(parent)
         
         extlist = [ext[0] for ext in exts]
         if not extlist:
@@ -1626,6 +1635,9 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
 
         ext,new_rule,comp_rule = self.choose_extension(parent, extlist)
         
+        if clear_reg_dims:
+            ext.clear_reg_dims()
+            
         assert parent.name != "Root" or ext
         
         parent.items = total_items #fix parent.items now that we've picked an extension
