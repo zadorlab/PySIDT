@@ -101,8 +101,6 @@ class SubgraphIsomorphicDecisionTree:
         iter_item_cap=100,
         max_structures_to_generate_extensions=400,
         max_structures_to_choose_extension=np.inf,
-        max_batch_size=np.inf,
-        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -136,8 +134,6 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
-        self.max_batch_size = max_batch_size
-        self.new_fraction_threshold_to_reopt_node = new_fraction_threshold_to_reopt_node
         self.max_nodes = max_nodes
         self.max_structures_to_generate_extensions = max_structures_to_generate_extensions
         self.max_structures_to_choose_extension = max_structures_to_choose_extension
@@ -167,39 +163,6 @@ class SubgraphIsomorphicDecisionTree:
                         self.root.children.append(n)
                         self.nodes[name] = n
 
-    def get_batches(self, data, first_batch_include=[]):
-        """
-        Break data up into batches
-
-        Args:
-            data (_type_): _description_
-            first_batch_include (list, optional): _description_. Defaults to [].
-
-        Returns:
-            _type_: _description_
-        """
-        Ndata = len(data)
-        shdata = [d for d in data if d not in first_batch_include]
-        np.random.shuffle(shdata)
-        
-        batch1 = first_batch_include[:]
-        assert len(batch1) < self.max_batch_size
-        batch1.extend(shdata[:self.max_batch_size-len(batch1)])
-        if len(batch1) < self.max_batch_size:
-            return [batch1]
-    
-        shdata = shdata[self.max_batch_size-len(batch1):]
-        batches = [batch1] 
-        N = 0
-        while N+self.max_batch_size < len(shdata):
-            batches.append(shdata[N:N+self.max_batch_size])
-            N += self.max_batch_size
-        batchend = shdata[N:]
-        if len(batchend) != 0:
-            batches.append(batchend)
-        
-        logging.info("Divided {0} Data points into batches: {1}".format(Ndata,[len(x) for x in batches]))
-        return batches
             
     def prune(self,newdata):
         """
@@ -447,7 +410,7 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True, first_batch_include=[]):
+    def generate_tree(self, data, check_data=True):
         """
         generate nodes for the tree based on the supplied data
         """
@@ -464,37 +427,18 @@ class SubgraphIsomorphicDecisionTree:
                     logging.info("Datum did not match Root node:")
                     logging.info(datum.mol.to_adjacency_list())
                     raise ValueError
-
-        if self.max_batch_size > len(data):
-            batches = [data]
-        else:
-            logging.info("using cascade algorithm")
-            batches = self.get_batches(data,first_batch_include=first_batch_include)
-        
-        data_temp = []
-        for i,batch in enumerate(batches):
-            data_temp += batch
-            if len(batches) > 1:
-                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
-            if i != 0:
-                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
-                self.prune(data)
-                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-            self.clear_data()
-            self.root.items = data_temp[:]
-            if len(self.nodes) > 1:
-                self.descend_training_from_top()
             
+        node = self.select_node()
+        
+        while True:
+            if len(self.nodes) > self.max_nodes:
+                break
+            if not node:
+                logging.info("Did not find any nodes to expand")
+                break
+            else:
+                self.extend_tree_from_node(node)
             node = self.select_node()
-            while True:
-                if len(self.nodes) > self.max_nodes:
-                    break
-                if not node:
-                    logging.info("Did not find any nodes to expand")
-                    break
-                else:
-                    self.extend_tree_from_node(node)
-                node = self.select_node()
 
     def fit_tree(self, data=None):
         """
@@ -742,8 +686,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         max_structures_to_generate_extensions=400,
         max_structures_to_choose_extension=np.inf,
         fract_nodes_expand_per_iter=0,
-        max_batch_size=np.inf,
-        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -771,8 +713,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             iter_item_cap=iter_item_cap,
             max_structures_to_generate_extensions=max_structures_to_generate_extensions,
             max_structures_to_choose_extension=max_structures_to_choose_extension,
-            max_batch_size=max_batch_size,
-            new_fraction_threshold_to_reopt_node=new_fraction_threshold_to_reopt_node,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -896,7 +836,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         max_nodes=None,
         postpruning_based_on_val=True,
         alpha=0.1,
-        first_batch_include=[],
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -912,50 +851,38 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         np.random.seed(0)
         logging.info("Checking starting tree is subgraph isomorphic")
         self.check_subgraph_isomorphic()
-        
-        if self.max_batch_size > len(data):
-            batches = [data]
-        else:
-            logging.info("using cascade algorithm")
-            batches = self.get_batches(data,first_batch_include=first_batch_include)
-        data = []
-        for i,batch in enumerate(batches):
-            data += batch
-            if len(batches) > 1:
-                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
-            if i != 0:
-                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
-                self.prune(data)
-                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-            logging.info("setting up data")
-            self.setup_data(data, check_data=check_data)
-            logging.info("descending data down the tree")
-            if len(self.nodes) > 1:
-                self.descend_training_from_top(only_specific_match=True)
-            self.val_mae = np.inf
-            self.skip_nodes = []
-            self.new_nodes = []
 
-            self.validation_set = validation_set
-            self.test_set = test_set 
-            
-            while True:
-                logging.info("Fitting Tree")
-                self.fit_tree(alpha=alpha)
-                if len(self.nodes) > max_nodes:
-                    break
-                self.new_nodes = []
-                num = int(
-                    max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
-                )
-                logging.info("selecting nodes")
-                nodes = self.select_nodes(num=num)
-                if not nodes:
-                    logging.info("Did not find any nodes to expand")
-                    break
-                else:
-                    for node in nodes:
-                        self.extend_tree_from_node(node)
+        logging.info("setting up data")
+        self.setup_data(data, check_data=check_data)
+        
+        logging.info("descending data down the tree")
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
+        
+        self.val_mae = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+
+        self.validation_set = validation_set
+        self.test_set = test_set 
+        
+        while True:
+            logging.info("Fitting Tree")
+            self.fit_tree(alpha=alpha)
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            num = int(
+                max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
+            )
+            logging.info("selecting nodes")
+            nodes = self.select_nodes(num=num)
+            if not nodes:
+                logging.info("Did not find any nodes to expand")
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
                 
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation error")
@@ -1447,8 +1374,6 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         max_structures_to_generate_extensions=400,
         max_structures_to_choose_extension=np.inf,
         fract_nodes_expand_per_iter=0,
-        max_batch_size=np.inf,
-        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -1478,8 +1403,6 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             max_structures_to_generate_extensions=max_structures_to_generate_extensions,
             max_structures_to_choose_extension=max_structures_to_choose_extension,
             fract_nodes_expand_per_iter=fract_nodes_expand_per_iter,
-            max_batch_size=max_batch_size,
-            new_fraction_threshold_to_reopt_node=new_fraction_threshold_to_reopt_node,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -1821,7 +1744,6 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         postpruning_based_on_val=True,
         root_classification=True,
         max_skip_node_clears=1,
-        first_batch_include=[],
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -1839,52 +1761,38 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         
         self.root.rule = root_classification
         
-        if self.max_batch_size > len(data):
-            batches = [data]
-        else:
-            logging.info("using cascade algorithm, generating batches")
-            batches = self.get_batches(data,first_batch_include=first_batch_include)
-        data = []
-        for i,batch in enumerate(batches):
-            data += batch
-            if len(batches) > 1:
-                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
-            if i != 0:
-                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
-                self.prune(data)
-                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-            
-            self.setup_data(data, check_data=check_data)
-            if len(self.nodes) > 1:
-                self.descend_training_from_top(only_specific_match=True)
-                for node in self.nodes.values():
-                    if node.rule is None:
-                        node.rule = True
-            self.val_mae = np.inf
-            self.skip_nodes = []
-            self.new_nodes = []
-
-            self.validation_set = validation_set
-            self.test_set = test_set
-            num_skip_node_clears = 0
-            while True:
-                self.analyze_error()
-                if len(self.nodes) > max_nodes:
-                    break
-                self.new_nodes = []
-                nodes = self.select_nodes()
-                if not nodes:
-                    if self.skip_nodes and num_skip_node_clears < max_skip_node_clears:
-                        logging.info("Clearing skip_nodes")
-                        num_skip_node_clears += 1
-                        self.skip_nodes = []
-                        continue
+        self.setup_data(data, check_data=check_data)
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
+            for node in self.nodes.values():
+                if node.rule is None:
+                    node.rule = True
                     
-                    logging.info("no selected nodes, terminating...")
-                    break
-                else:
-                    for node in nodes:
-                        self.extend_tree_from_node(node)
+        self.val_mae = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+
+        self.validation_set = validation_set
+        self.test_set = test_set
+        num_skip_node_clears = 0
+        while True:
+            self.analyze_error()
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            nodes = self.select_nodes()
+            if not nodes:
+                if self.skip_nodes and num_skip_node_clears < max_skip_node_clears:
+                    logging.info("Clearing skip_nodes")
+                    num_skip_node_clears += 1
+                    self.skip_nodes = []
+                    continue
+                
+                logging.info("no selected nodes, terminating...")
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
         
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation accuracy")
