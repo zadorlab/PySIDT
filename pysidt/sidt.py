@@ -84,7 +84,7 @@ class SubgraphIsomorphicDecisionTree:
         `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
         `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
         `max_structures_to_generate_extensions`: maximum number of structures used in extension generation (a seeded random sample is drawn if larger than this number)
-        `max_structures_to_choose_extension`: maximum number of structures used in choosing an extension (a seeded random sample is drawn if larger than this number)
+        `choose_extension_based_on_subsamples`: if extension generation used subsamples use subsamples for choosing extension
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
         `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
@@ -100,7 +100,7 @@ class SubgraphIsomorphicDecisionTree:
         iter_max=2,
         iter_item_cap=100,
         max_structures_to_generate_extensions=400,
-        max_structures_to_choose_extension=np.inf,
+        choose_extension_based_on_subsamples=False,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -136,7 +136,8 @@ class SubgraphIsomorphicDecisionTree:
         self.uncertainty_prepruning = uncertainty_prepruning
         self.max_nodes = max_nodes
         self.max_structures_to_generate_extensions = max_structures_to_generate_extensions
-        self.max_structures_to_choose_extension = max_structures_to_choose_extension
+        self.choose_extension_based_on_subsamples = choose_extension_based_on_subsamples
+        self.stuctures_for_extension_generation = None 
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -228,9 +229,11 @@ class SubgraphIsomorphicDecisionTree:
         if len(node.items) <= self.max_structures_to_generate_extensions:
             structs = node.items
             clear_reg_dims = False
+            self.stuctures_for_extension_generation = node.items
         else:
             logging.info(f"Sampling {self.max_structures_to_generate_extensions} structures from {len(node.items)} structures at node {node.name}")
             structs = np.random.choice(node.items,self.max_structures_to_generate_extensions,replace=False)
+            self.stuctures_for_extension_generation = structs
             clear_reg_dims = True
             
         out, gave_up_split = get_extension_edge(
@@ -289,11 +292,10 @@ class SubgraphIsomorphicDecisionTree:
         almost always subclassed
         """
         logging.info(f"Choosing from {len(exts)} extensions")
-        if len(node.items) <= self.max_structures_to_choose_extension:
-            structs = node.items
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
         else:
-            logging.info(f"Sampling {self.max_structures_to_choose_extension} structures from {len(node.items)} structures at node {node.name}")
-            structs = np.random.choice(node.items,self.max_structures_to_choose_extension,replace=False)
+            structs = node.items
             
         minval = np.inf
         minext = None
@@ -686,7 +688,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         iter_max=2,
         iter_item_cap=100,
         max_structures_to_generate_extensions=400,
-        max_structures_to_choose_extension=np.inf,
+        choose_extension_based_on_subsamples=False,
         fract_nodes_expand_per_iter=0,
         r=None,
         r_bonds=None,
@@ -714,7 +716,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
             max_structures_to_generate_extensions=max_structures_to_generate_extensions,
-            max_structures_to_choose_extension=max_structures_to_choose_extension,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -1127,7 +1129,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
         `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
         `max_structures_to_generate_extensions`: maximum number of structures used in extension generation (a seeded random sample is drawn if larger than this number)
-        `max_structures_to_choose_extension`: maximum number of structures used in choosing an extension (a seeded random sample is drawn if larger than this number)
+        `choose_extension_based_on_subsamples`: if extension generation used subsamples use subsamples for choosing extension
         `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
@@ -1259,11 +1261,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         returns a Node object
         almost always subclassed
         """
-        if len(node.items) <= self.max_structures_to_choose_extension:
-            structs = node.items
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
         else:
-            logging.info(f"Sampling {self.max_structures_to_choose_extension} structures from {len(node.items)} structures at node {node.name}")
-            structs = np.random.choice(node.items,self.max_structures_to_choose_extension,replace=False)
+            structs = node.items
             
         maxval = 0.0
         maxext = None
@@ -1357,7 +1358,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
         `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
         `max_structures_to_generate_extensions`: maximum number of structures used in extension generation (a seeded random sample is drawn if larger than this number)
-        `max_structures_to_choose_extension`: maximum number of structures used in choosing an extension (a seeded random sample is drawn if larger than this number)
+        `choose_extension_based_on_subsamples`: if extension generation used subsamples use subsamples for choosing extension
         `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
@@ -1376,7 +1377,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         iter_max=2,
         iter_item_cap=100,
         max_structures_to_generate_extensions=400,
-        max_structures_to_choose_extension=np.inf,
+        choose_extension_based_on_subsamples=False,
         fract_nodes_expand_per_iter=0,
         r=None,
         r_bonds=None,
@@ -1405,7 +1406,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
             max_structures_to_generate_extensions=max_structures_to_generate_extensions,
-            max_structures_to_choose_extension=max_structures_to_choose_extension,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
             fract_nodes_expand_per_iter=fract_nodes_expand_per_iter,
             r=r,
             r_bonds=r_bonds,
@@ -1469,11 +1470,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         returns a Node object
         almost always subclassed
         """
-        if len(node.items) <= self.max_structures_to_choose_extension:
-            structs = node.items
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
         else:
-            logging.info(f"Sampling {self.max_structures_to_choose_extension} structures from {len(node.items)} structures at node {node.name}")
-            structs = np.random.choice(node.items,self.max_structures_to_choose_extension,replace=False)
+            structs = node.items
             
         maxval = -np.inf
         maxext = None
