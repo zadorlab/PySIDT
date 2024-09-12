@@ -340,8 +340,10 @@ class SubgraphIsomorphicDecisionTree:
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
         if clear_reg_dims:
-            grp.clear_reg_dims()
-            grpc.clear_reg_dims()
+            if grp:
+                grp.clear_reg_dims()
+            if grpc:
+                grpc.clear_reg_dims()
         logging.info("Choose extension {}".format(name))
 
         node = Node(
@@ -1184,8 +1186,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
         if clear_reg_dims:
-            grp.clear_reg_dims()
-            grpc.clear_reg_dims()
+            if grp:
+                grp.clear_reg_dims()
+            if grpc:
+                grpc.clear_reg_dims()
             
         node = Node(
             group=grp,
@@ -1564,7 +1568,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         ext,new_rule,comp_rule = self.choose_extension(parent, extlist)
         
         if clear_reg_dims:
-            ext.clear_reg_dims()
+            if ext:
+                ext.clear_reg_dims()
             
         assert parent.name != "Root" or ext
         
