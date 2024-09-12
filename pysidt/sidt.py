@@ -241,10 +241,20 @@ class SubgraphIsomorphicDecisionTree:
         returns list of Groups
         design not to subclass
         """
-
+        if len(node.items) <= self.max_structures_to_generate_extensions:
+            structs = node.items
+            clear_reg_dims = False
+        else:
+            logging.info(f"Samping {self.max_structures_to_generate_extensions} structures from {len(node.items)} structures at node {node.name}")
+            structs = np.random.choice(node.items,self.max_structures_to_generate_extensions,replace=False)
+            clear_reg_dims = True
+            
         out, gave_up_split = get_extension_edge(
-            node,
-            self.n_strucs_min,
+            group=node.group,
+            items=structs,
+            node_children=node.children,
+            basename=node.name,
+            n_strucs_min=self.n_strucs_min,
             r=self.r,
             r_bonds=self.r_bonds,
             r_un=self.r_un,
@@ -262,13 +272,13 @@ class SubgraphIsomorphicDecisionTree:
 
         if not out:
             logging.info("forward extension generation failed, using reverse extension generation")
-            grps = generate_extensions_reverse(node.group,node.items)
+            grps = generate_extensions_reverse(node.group,structs)
             name = node.name+"_Revgen"
             i = 0
             while name+str(i) in self.nodes.keys():
                 i += 1
             
-            return [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None]
+            return [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None],False
 
         if not out:
             logging.warning(f"Failed to extend Node {node.name} with {len(node.items)} items")
@@ -281,9 +291,12 @@ class SubgraphIsomorphicDecisionTree:
                     logging.warning(item.mol.to_adjacency_list())
                 else:
                     logging.warning(item.to_adjacency_list())
-            return []
+            return [],clear_reg_dims
         
-        return out  # [(grp2, grpc, name, typ, indc)]
+        if clear_reg_dims:
+            node.group.clear_reg_dims()
+            
+        return out,clear_reg_dims  # [(grp2, grpc, name, typ, indc)]
 
     def choose_extension(self, node, exts):
         """
