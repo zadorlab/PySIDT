@@ -451,6 +451,7 @@ class SubgraphIsomorphicDecisionTree:
         """
         generate nodes for the tree based on the supplied data
         """
+        np.random.seed(0)
         self.check_subgraph_isomorphic()
 
         self.skip_nodes = []
@@ -908,6 +909,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `alpha`: regularization parameter for Lasso regression
         """
+        np.random.seed(0)
         self.check_subgraph_isomorphic()
         
         if self.max_batch_size > len(data):
@@ -1829,6 +1831,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `root_classification`: classification to set the root node to
         """
+        np.random.seed(0)
         self.check_subgraph_isomorphic()
         
         self.root.rule = root_classification
