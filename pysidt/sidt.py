@@ -245,7 +245,7 @@ class SubgraphIsomorphicDecisionTree:
             structs = node.items
             clear_reg_dims = False
         else:
-            logging.info(f"Samping {self.max_structures_to_generate_extensions} structures from {len(node.items)} structures at node {node.name}")
+            logging.info(f"Sampling {self.max_structures_to_generate_extensions} structures from {len(node.items)} structures at node {node.name}")
             structs = np.random.choice(node.items,self.max_structures_to_generate_extensions,replace=False)
             clear_reg_dims = True
             
