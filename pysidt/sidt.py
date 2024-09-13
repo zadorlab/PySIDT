@@ -431,9 +431,14 @@ class SubgraphIsomorphicDecisionTree:
                     logging.info("Datum did not match Root node:")
                     logging.info(datum.mol.to_adjacency_list())
                     raise ValueError
-            
-        node = self.select_node()
         
+        self.root.items = data[:]
+        
+        if len(self.nodes) > 1:
+            self.descend_training_from_top()
+                
+        node = self.select_node()
+        logging.info(node)
         while True:
             if len(self.nodes) > self.max_nodes:
                 break
