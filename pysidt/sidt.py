@@ -919,24 +919,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             for n,node in self.nodes.items():
                 node.rule = self.best_rule_map[n]
                 
-        # if self.validation_set:
-        #     val_predictions_uncertainties = [self.evaluate(d.mol, estimate_uncertainty=True) for d in self.validation_set]
-        #     val_predictions = [pred_unc[0] for pred_unc in val_predictions_uncertainties]
-        #     val_uncertainties = [pred_unc[1] for pred_unc in val_predictions_uncertainties]
-        #     val_error = [val_predictions[i] - self.validation_set[i].value for i in range(len(self.validation_set))]
-        #     initial_scaling_factor = 1.0
-        #     assert all([v is not None for v in val_error]), "val_error contains None values"
-        #     assert all([v is not None for v in val_uncertainties]), "val_uncertainties contains None values"
-        #     result = minimize(objective_function, [initial_scaling_factor], args=(val_error, val_uncertainties), method="Nelder-Mead")
-        #     optimized_scaling_factor = result.x[0]
-        #     logging.info(f"Scaling Node Uncertainties by Optimized Scaling Factor {optimized_scaling_factor:.3f}")
-        #     print(type(self.node_uncertainties))
-        #     for node, unc in self.node_uncertainties.items():
-        #         print(self.node_uncertainties[node])
-        #         self.node_uncertainties[node] = unc * optimized_scaling_factor
-        #         print(f"{(unc/4184):.3f} => {(unc * optimized_scaling_factor/4184):.3f}")
-        #         print(self.node_uncertainties[node])
-            
     def fit_tree(self, data=None, check_data=True, alpha=0.1):
         """
         fit rule for each node
