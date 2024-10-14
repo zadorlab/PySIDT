@@ -1201,7 +1201,13 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
                 grp.clear_reg_dims()
             if grpc:
                 grpc.clear_reg_dims()
-            
+        
+        inc = 0
+        bname = name
+        while name in self.nodes.keys():
+            name = bname + str(inc)
+            inc += 1
+        
         node = Node(
             group=grp,
             items=new,
