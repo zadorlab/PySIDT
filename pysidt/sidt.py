@@ -657,8 +657,12 @@ def read_nodes(file, class_dict=None):
         nodesdict = json.load(f)
     nodes = dict()
     for n, d in nodesdict.items():
+        if d["group"] is None:
+            g = None
+        else:
+            g = Group().from_adjacency_list(d["group"])
         nodes[n] = Node(
-            group=Group().from_adjacency_list(d["group"]),
+            group=g,
             rule=d["rule"],
             parent=d["parent"],
             children=d["children"],
