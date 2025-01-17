@@ -43,3 +43,53 @@ def bond_decomposition(mol):
         structs.append(m)
 
     return structs
+
+def adsorbate_interaction_decomposition(mol):
+    surface_bonded_inds = []
+    for i,at in enumerate(mol.atoms):
+        if at.is_bonded_to_surface() and not at.is_surface_site():
+            surface_bonded_inds.append(i)
+    
+    structs = []
+    for i,indi in enumerate(surface_bonded_inds):
+        for j,indj in enumerate(surface_bonded_inds):
+            if i > j:
+                st = mol.copy(deep=True)
+                st.atoms[indi].label = "*"
+                st.atoms[indj].label = "*"
+                structs.append(st)
+    
+    return structs
+
+def adsorbate_triad_interaction_decomposition(mol):
+    surface_bonded_inds = []
+    for i,at in enumerate(mol.atoms):
+        if at.is_bonded_to_surface() and not at.is_surface_site():
+            surface_bonded_inds.append(i)
+    
+    structs = []
+    for i,indi in enumerate(surface_bonded_inds):
+        for j,indj in enumerate(surface_bonded_inds):
+            for k,indk in enumerate(surface_bonded_inds):
+                if i > j and j > k:
+                    st = mol.copy(deep=True)
+                    st.atoms[indi].label = "*"
+                    st.atoms[indj].label = "*"
+                    st.atoms[indk].label = "*"
+                    structs.append(st)
+    
+    return structs
+    
+def adsorbate_site_decomposition(mol):
+    surface_bonded_inds = []
+    for i,at in enumerate(mol.atoms):
+        if at.is_bonded_to_surface() and not at.is_surface_site():
+            surface_bonded_inds.append(i)
+    
+    structs = []
+    for i,indi in enumerate(surface_bonded_inds):
+        st = mol.copy(deep=True)
+        st.atoms[indi].label = "*"
+        structs.append(st)
+    
+    return structs
