@@ -1213,7 +1213,9 @@ def generate_extensions_reverse(grp,structs):
 
         exts.extend(list(best_split_to_ext.values()))
 
-
+    for ext in exts:
+        ext.multiplicity = grp.multiplicity
+    
     return exts
 
 def score_atom_reverse_extension_generation(g,atm):
