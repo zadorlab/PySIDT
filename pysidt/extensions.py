@@ -43,7 +43,10 @@ def split_mols(data, newgrp):
 
 
 def get_extension_edge(
-    parent,
+    group,
+    items,
+    node_children,
+    basename,
     n_strucs_min,
     iter_max=np.inf,
     iter_item_cap=np.inf,
@@ -78,8 +81,8 @@ def get_extension_edge(
         r_morph = []
 
     out_exts = [[]]
-    grps = [[parent.group]]
-    names = [parent.name]
+    grps = [[group]]
+    names = [basename]
     first_time = True
     gave_up_split = False
 
@@ -111,7 +114,7 @@ def get_extension_edge(
                 # second is extensions that match all reactions
                 reg_dict[(typ, indc)] = ([], [])
 
-            new, comp = split_mols(parent.items, grp2)
+            new, comp = split_mols(items, grp2)
 
             if len(new) == 0:
                 val = np.inf
@@ -175,7 +178,7 @@ def get_extension_edge(
         ):  # have to label the regularization dimensions in all relevant groups
             reg_val = reg_dict[(typr, indcr)]
 
-            if first_time and not parent.children:
+            if first_time and not node_children:
                 # parent
                 if (
                     typr != "intNewBondExt" and typr != "extNewBondExt"
@@ -305,8 +308,8 @@ def get_extension_edge(
             iter += 1
             if len(grps[iter]) > iter_item_cap:
                 logging.error(
-                    "Recursion item cap hit not splitting {0} reactions at iter {1} with {2} items".format(
-                        len(parent.items), iter, len(grps[iter])
+                    "Recursion item cap hit not splitting {0} data at iter {1} with {2} items".format(
+                        len(items), iter, len(grps[iter])
                     )
                 )
                 iter -= 1
@@ -1210,7 +1213,9 @@ def generate_extensions_reverse(grp,structs):
 
         exts.extend(list(best_split_to_ext.values()))
 
-
+    for ext in exts:
+        ext.multiplicity = grp.multiplicity
+    
     return exts
 
 def score_atom_reverse_extension_generation(g,atm):
