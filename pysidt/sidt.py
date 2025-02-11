@@ -74,6 +74,23 @@ class Datum:
 
 
 class SubgraphIsomorphicDecisionTree:
+    """
+    Makes prediction for a molecule based on multiple evaluations.
+
+    Args:
+        `root_group`: root group for the tree
+        `nodes`: dictionary of nodes for the tree
+        `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
+        `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
+        `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `max_structures_to_generate_extensions`: maximum number of structures used in extension generation (a seeded random sample is drawn if larger than this number)
+        `choose_extension_based_on_subsamples`: if extension generation used subsamples use subsamples for choosing extension
+        `r`: atom types to generate extensions. If None, all atom types will be used.
+        `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
+        `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_site`: surface sites to generate extensions. If None, [] will be used.
+        `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+    """
     def __init__(
         self,
         root_group=None,
@@ -82,8 +99,8 @@ class SubgraphIsomorphicDecisionTree:
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
-        max_batch_size=np.inf,
-        new_fraction_threshold_to_reopt_node=0.25,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -117,9 +134,10 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
-        self.max_batch_size = max_batch_size
-        self.new_fraction_threshold_to_reopt_node = new_fraction_threshold_to_reopt_node
         self.max_nodes = max_nodes
+        self.max_structures_to_generate_extensions = max_structures_to_generate_extensions
+        self.choose_extension_based_on_subsamples = choose_extension_based_on_subsamples
+        self.stuctures_for_extension_generation = None 
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -146,39 +164,6 @@ class SubgraphIsomorphicDecisionTree:
                         self.root.children.append(n)
                         self.nodes[name] = n
 
-    def get_batches(self, data, first_batch_include=[]):
-        """
-        Break data up into batches
-
-        Args:
-            data (_type_): _description_
-            first_batch_include (list, optional): _description_. Defaults to [].
-
-        Returns:
-            _type_: _description_
-        """
-        Ndata = len(data)
-        shdata = [d for d in data if d not in first_batch_include]
-        np.random.shuffle(shdata)
-        
-        batch1 = first_batch_include[:]
-        assert len(batch1) < self.max_batch_size
-        batch1.extend(shdata[:self.max_batch_size-len(batch1)])
-        if len(batch1) < self.max_batch_size:
-            return [batch1]
-    
-        shdata = shdata[self.max_batch_size-len(batch1):]
-        batches = [batch1] 
-        N = 0
-        while N+self.max_batch_size < len(shdata):
-            batches.append(shdata[N:N+self.max_batch_size])
-            N += self.max_batch_size
-        batchend = shdata[N:]
-        if len(batchend) != 0:
-            batches.append(batchend)
-        
-        logging.info("Divided {0} Data points into batches: {1}".format(Ndata,[len(x) for x in batches]))
-        return batches
             
     def prune(self,newdata):
         """
@@ -241,10 +226,22 @@ class SubgraphIsomorphicDecisionTree:
         returns list of Groups
         design not to subclass
         """
-
+        if len(node.items) <= self.max_structures_to_generate_extensions:
+            structs = node.items
+            clear_reg_dims = False
+            self.stuctures_for_extension_generation = node.items
+        else:
+            logging.info(f"Sampling {self.max_structures_to_generate_extensions} structures from {len(node.items)} structures at node {node.name}")
+            structs = np.random.choice(node.items,self.max_structures_to_generate_extensions,replace=False)
+            self.stuctures_for_extension_generation = structs
+            clear_reg_dims = True
+            
         out, gave_up_split = get_extension_edge(
-            node,
-            self.n_strucs_min,
+            group=node.group,
+            items=structs,
+            node_children=node.children,
+            basename=node.name,
+            n_strucs_min=self.n_strucs_min,
             r=self.r,
             r_bonds=self.r_bonds,
             r_un=self.r_un,
@@ -262,28 +259,18 @@ class SubgraphIsomorphicDecisionTree:
 
         if not out:
             logging.info("forward extension generation failed, using reverse extension generation")
-            grps = generate_extensions_reverse(node.group,node.items)
+            grps = generate_extensions_reverse(node.group,structs)
             name = node.name+"_Revgen"
             i = 0
             while name+str(i) in self.nodes.keys():
                 i += 1
-            
-            return [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None]
-
-        if not out:
-            logging.warning(f"Failed to extend Node {node.name} with {len(node.items)} items")
-            logging.warning("node")
-            logging.warning(node.group.to_adjacency_list())
-            logging.warning("Items:")
-            for item in node.items:
-                if isinstance(item, Datum):
-                    logging.warning(item.value)
-                    logging.warning(item.mol.to_adjacency_list())
-                else:
-                    logging.warning(item.to_adjacency_list())
-            return []
+            out = [(g,None,node.name+"_Revgen"+str(i),"Revgen",None) for g in grps if g is not None]
+            clear_reg_dims = False
         
-        return out  # [(grp2, grpc, name, typ, indc)]
+        if clear_reg_dims:
+            node.group.clear_reg_dims()
+            
+        return out,clear_reg_dims  # [(grp2, grpc, name, typ, indc)]
 
     def choose_extension(self, node, exts):
         """
@@ -291,10 +278,16 @@ class SubgraphIsomorphicDecisionTree:
         returns a Node object
         almost always subclassed
         """
+        logging.info(f"Choosing from {len(exts)} extensions")
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
         minval = np.inf
         minext = None
         for ext in exts:
-            new, comp = split_mols(node.items, ext)
+            new, comp = split_mols(structs, ext)
             Lnew = len(new)
             Lcomp = len(comp)
             if Lnew  > 1 and Lcomp > 1:
@@ -325,7 +318,7 @@ class SubgraphIsomorphicDecisionTree:
         """
         Adds a new node to the tree
         """
-        exts = self.generate_extensions(parent)
+        exts,clear_reg_dims = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
             logging.info(f"Skipping node {parent.name}")
@@ -335,6 +328,11 @@ class SubgraphIsomorphicDecisionTree:
         new, comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
+        if clear_reg_dims:
+            if grp:
+                grp.clear_reg_dims()
+            if grpc:
+                grpc.clear_reg_dims()
         logging.info("Choose extension {}".format(name))
 
         node = Node(
@@ -403,10 +401,11 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True, first_batch_include=[]):
+    def generate_tree(self, data, check_data=True):
         """
         generate nodes for the tree based on the supplied data
         """
+        np.random.seed(0)
         self.check_subgraph_isomorphic()
 
         self.skip_nodes = []
@@ -419,37 +418,23 @@ class SubgraphIsomorphicDecisionTree:
                     logging.info("Datum did not match Root node:")
                     logging.info(datum.mol.to_adjacency_list())
                     raise ValueError
-
-        if self.max_batch_size > len(data):
-            batches = [data]
-        else:
-            logging.info("using cascade algorithm")
-            batches = self.get_batches(data,first_batch_include=first_batch_include)
         
-        data_temp = []
-        for i,batch in enumerate(batches):
-            data_temp += batch
-            if len(batches) > 1:
-                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
-            if i != 0:
-                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
-                self.prune(data)
-                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-            self.clear_data()
-            self.root.items = data_temp[:]
-            if len(self.nodes) > 1:
-                self.descend_training_from_top()
-            
+        self.root.items = data[:]
+        
+        if len(self.nodes) > 1:
+            self.descend_training_from_top()
+                
+        node = self.select_node()
+        logging.info(node)
+        while True:
+            if len(self.nodes) > self.max_nodes:
+                break
+            if not node:
+                logging.info("Did not find any nodes to expand")
+                break
+            else:
+                self.extend_tree_from_node(node)
             node = self.select_node()
-            while True:
-                if len(self.nodes) > self.max_nodes:
-                    break
-                if not node:
-                    logging.info("Did not find any nodes to expand")
-                    break
-                else:
-                    self.extend_tree_from_node(node)
-                node = self.select_node()
 
     def fit_tree(self, data=None):
         """
@@ -659,8 +644,12 @@ def read_nodes(file, class_dict=None):
         nodesdict = json.load(f)
     nodes = dict()
     for n, d in nodesdict.items():
+        if d["group"] is None:
+            g = None
+        else:
+            g = Group().from_adjacency_list(d["group"])
         nodes[n] = Node(
-            group=Group().from_adjacency_list(d["group"]),
+            group=g,
             rule=d["rule"],
             parent=d["parent"],
             children=d["children"],
@@ -694,9 +683,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
         fract_nodes_expand_per_iter=0,
-        max_batch_size=np.inf,
-        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -722,8 +711,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
-            max_batch_size=max_batch_size,
-            new_fraction_threshold_to_reopt_node=new_fraction_threshold_to_reopt_node,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -847,7 +836,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         max_nodes=None,
         postpruning_based_on_val=True,
         alpha=0.1,
-        first_batch_include=[],
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -860,49 +848,41 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `alpha`: regularization parameter for Lasso regression
         """
+        np.random.seed(0)
+        logging.info("Checking starting tree is subgraph isomorphic")
         self.check_subgraph_isomorphic()
-        
-        if self.max_batch_size > len(data):
-            batches = [data]
-        else:
-            logging.info("using cascade algorithm")
-            batches = self.get_batches(data,first_batch_include=first_batch_include)
-        data = []
-        for i,batch in enumerate(batches):
-            data += batch
-            if len(batches) > 1:
-                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
-            if i != 0:
-                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
-                self.prune(data)
-                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-                
-            self.setup_data(data, check_data=check_data)
-            
-            if len(self.nodes) > 1:
-                self.descend_training_from_top(only_specific_match=True)
-            self.val_mae = np.inf
-            self.skip_nodes = []
-            self.new_nodes = []
 
-            self.validation_set = validation_set
-            self.test_set = test_set 
-            
-            while True:
-                self.fit_tree(alpha=alpha)
-                if len(self.nodes) > max_nodes:
-                    break
-                self.new_nodes = []
-                num = int(
-                    max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
-                )
-                nodes = self.select_nodes(num=num)
-                if not nodes:
-                    logging.info("Did not find any nodes to expand")
-                    break
-                else:
-                    for node in nodes:
-                        self.extend_tree_from_node(node)
+        logging.info("setting up data")
+        self.setup_data(data, check_data=check_data)
+        
+        logging.info("descending data down the tree")
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
+        
+        self.val_mae = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+
+        self.validation_set = validation_set
+        self.test_set = test_set 
+        
+        while True:
+            logging.info("Fitting Tree")
+            self.fit_tree(alpha=alpha)
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            num = int(
+                max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
+            )
+            logging.info("selecting nodes")
+            nodes = self.select_nodes(num=num)
+            if not nodes:
+                logging.info("Did not find any nodes to expand")
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
                 
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation error")
@@ -1144,6 +1124,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
         `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
         `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `max_structures_to_generate_extensions`: maximum number of structures used in extension generation (a seeded random sample is drawn if larger than this number)
+        `choose_extension_based_on_subsamples`: if extension generation used subsamples use subsamples for choosing extension
         `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
@@ -1157,10 +1139,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         """
         if self.uncertainty_prepruning:
             selectable_nodes = [
-                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node)
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes and node.name not in self.new_nodes
             ]
         else:
-            selectable_nodes = list(self.nodes.values())
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes and node.name not in self.new_nodes]
 
         if len(selectable_nodes) > num:
             rulevals = [
@@ -1186,19 +1168,35 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         """
         Adds a new node to the tree
         """
-        exts = self.generate_extensions(parent)
+        logging.info("Generating extensions")
+        exts,clear_reg_dims = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
+            logging.info("No extensions generated adding {} to skip_nodes".format(parent.name))
             self.skip_nodes.append(parent.name)
             return
+        logging.info("choosing extensions")
         ext = self.choose_extension(parent, extlist)
         if ext is None:
+            logging.info("No extension selected adding {} to skip_nodes".format(parent.name))
             self.skip_nodes.append(parent.name)
             return
+        logging.info("adding extension")
         new, comp = split_mols(parent.items, ext)
         ind = extlist.index(ext)
         grp, grpc, name, typ, indc = exts[ind]
-
+        if clear_reg_dims:
+            if grp:
+                grp.clear_reg_dims()
+            if grpc:
+                grpc.clear_reg_dims()
+        
+        inc = 0
+        bname = name
+        while name in self.nodes.keys():
+            name = bname + str(inc)
+            inc += 1
+        
         node = Node(
             group=grp,
             items=new,
@@ -1267,27 +1265,40 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         returns a Node object
         almost always subclassed
         """
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
         maxval = 0.0
         maxext = None
         for ext in exts:
-            new, comp = split_mols(node.items, ext)
+            new, comp = split_mols(structs, ext)
             newval = 0.0
             compval = 0.0
             for i, datum in enumerate(self.datums):
-                dy = self.data_delta[i] / len(self.mol_node_maps[datum]["mols"])
                 for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                    v = self.node_uncertainties[
-                        self.mol_node_maps[datum]["nodes"][j].name
-                    ]
-                    s = sum(
-                        self.node_uncertainties[
-                            self.mol_node_maps[datum]["nodes"][k].name
-                        ]
-                        for k in range(len(self.mol_node_maps[datum]["nodes"]))
-                    )
                     if any(d is x for x in new):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name
+                        ]
+                        s = sum(
+                            self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ]
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
                         newval += self.data_delta[i] * v / s
                     elif any(d is x for x in comp):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name
+                        ]
+                        s = sum(
+                            self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ]
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
                         compval += self.data_delta[i] * v / s
             val = abs(newval - compval)
             if val > maxval:
@@ -1314,7 +1325,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             boo = True
             while boo:
                 for child in children:
-                    if d.is_subgraph_isomorphic(
+                    if child.group is None or d.is_subgraph_isomorphic(
                         child.group, generate_initial_map=True, save_order=True
                     ):
                         children = child.children
@@ -1350,6 +1361,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         `n_strucs_min`: minimum number of disconnected structures that can be in the group. Default is 1.
         `iter_max`: maximum number of times the extension generation algorithm is allowed to expand structures looking for additional splits. Default is 2.
         `iter_item_cap`: maximum number of structures the extension generation algorithm can send for expansion. Default is 100.
+        `max_structures_to_generate_extensions`: maximum number of structures used in extension generation (a seeded random sample is drawn if larger than this number)
+        `choose_extension_based_on_subsamples`: if extension generation used subsamples use subsamples for choosing extension
         `fract_nodes_expand_per_iter`: fraction of nodes to split at each iteration. If 0, only 1 node will be split at each iteration.
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
@@ -1367,9 +1380,9 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         n_strucs_min=1,
         iter_max=2,
         iter_item_cap=100,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
         fract_nodes_expand_per_iter=0,
-        max_batch_size=np.inf,
-        new_fraction_threshold_to_reopt_node=0.25,
         r=None,
         r_bonds=None,
         r_un=None,
@@ -1396,9 +1409,9 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             n_strucs_min=n_strucs_min,
             iter_max=iter_max,
             iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
             fract_nodes_expand_per_iter=fract_nodes_expand_per_iter,
-            max_batch_size=max_batch_size,
-            new_fraction_threshold_to_reopt_node=new_fraction_threshold_to_reopt_node,
             r=r,
             r_bonds=r_bonds,
             r_un=r_un,
@@ -1461,13 +1474,18 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         returns a Node object
         almost always subclassed
         """
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
         maxval = -np.inf
         maxext = None
         new_maxrule = None
         comp_maxrule = None
         
         for i,ext in enumerate(exts):
-            new, comp = split_mols(node.items, ext)
+            new, comp = split_mols(structs, ext)
             Nnew = len(new)
             Ncomp = len(comp)
             new_class_true = 0
@@ -1543,7 +1561,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         logging.info(f"extending node {parent.name}")
         Nitems = len(relevant_items)
         logging.info(f"considering {Nitems} relevant items")
-        exts = self.generate_extensions(parent)
+        exts,clear_reg_dims = self.generate_extensions(parent)
         
         extlist = [ext[0] for ext in exts]
         if not extlist:
@@ -1553,6 +1571,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
 
         ext,new_rule,comp_rule = self.choose_extension(parent, extlist)
         
+        if clear_reg_dims:
+            if ext:
+                ext.clear_reg_dims()
+            
         assert parent.name != "Root" or ext
         
         parent.items = total_items #fix parent.items now that we've picked an extension
@@ -1731,7 +1753,6 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         postpruning_based_on_val=True,
         root_classification=True,
         max_skip_node_clears=1,
-        first_batch_include=[],
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -1744,56 +1765,43 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
             `root_classification`: classification to set the root node to
         """
+        np.random.seed(0)
         self.check_subgraph_isomorphic()
         
         self.root.rule = root_classification
         
-        if self.max_batch_size > len(data):
-            batches = [data]
-        else:
-            logging.info("using cascade algorithm, generating batches")
-            batches = self.get_batches(data,first_batch_include=first_batch_include)
-        data = []
-        for i,batch in enumerate(batches):
-            data += batch
-            if len(batches) > 1:
-                logging.info("Starting batch {0} with {1} data points".format(i+1,len(data)))
-            if i != 0:
-                logging.info("pruning tree with {} nodes".format(len(self.nodes)))
-                self.prune(data)
-                logging.info("pruned tree down to {} nodes".format(len(self.nodes)))
-            
-            self.setup_data(data, check_data=check_data)
-            if len(self.nodes) > 1:
-                self.descend_training_from_top(only_specific_match=True)
-                for node in self.nodes.values():
-                    if node.rule is None:
-                        node.rule = True
-            self.val_mae = np.inf
-            self.skip_nodes = []
-            self.new_nodes = []
-
-            self.validation_set = validation_set
-            self.test_set = test_set
-            num_skip_node_clears = 0
-            while True:
-                self.analyze_error()
-                if len(self.nodes) > max_nodes:
-                    break
-                self.new_nodes = []
-                nodes = self.select_nodes()
-                if not nodes:
-                    if self.skip_nodes and num_skip_node_clears < max_skip_node_clears:
-                        logging.info("Clearing skip_nodes")
-                        num_skip_node_clears += 1
-                        self.skip_nodes = []
-                        continue
+        self.setup_data(data, check_data=check_data)
+        if len(self.nodes) > 1:
+            self.descend_training_from_top(only_specific_match=True)
+            for node in self.nodes.values():
+                if node.rule is None:
+                    node.rule = True
                     
-                    logging.info("no selected nodes, terminating...")
-                    break
-                else:
-                    for node in nodes:
-                        self.extend_tree_from_node(node)
+        self.val_mae = np.inf
+        self.skip_nodes = []
+        self.new_nodes = []
+
+        self.validation_set = validation_set
+        self.test_set = test_set
+        num_skip_node_clears = 0
+        while True:
+            self.analyze_error()
+            if len(self.nodes) > max_nodes:
+                break
+            self.new_nodes = []
+            nodes = self.select_nodes()
+            if not nodes:
+                if self.skip_nodes and num_skip_node_clears < max_skip_node_clears:
+                    logging.info("Clearing skip_nodes")
+                    num_skip_node_clears += 1
+                    self.skip_nodes = []
+                    continue
+                
+                logging.info("no selected nodes, terminating...")
+                break
+            else:
+                for node in nodes:
+                    self.extend_tree_from_node(node)
         
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation accuracy")
