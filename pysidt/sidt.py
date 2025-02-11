@@ -1172,11 +1172,13 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         exts,clear_reg_dims = self.generate_extensions(parent)
         extlist = [ext[0] for ext in exts]
         if not extlist:
+            logging.info("No extensions generated adding {} to skip_nodes".format(parent.name))
             self.skip_nodes.append(parent.name)
             return
         logging.info("choosing extensions")
         ext = self.choose_extension(parent, extlist)
         if ext is None:
+            logging.info("No extension selected adding {} to skip_nodes".format(parent.name))
             self.skip_nodes.append(parent.name)
             return
         logging.info("adding extension")
