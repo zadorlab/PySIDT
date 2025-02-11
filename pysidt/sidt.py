@@ -1139,10 +1139,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         """
         if self.uncertainty_prepruning:
             selectable_nodes = [
-                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node)
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes and node.name not in self.new_nodes
             ]
         else:
-            selectable_nodes = list(self.nodes.values())
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes and node.name not in self.new_nodes]
 
         if len(selectable_nodes) > num:
             rulevals = [
