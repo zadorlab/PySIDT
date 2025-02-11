@@ -1325,7 +1325,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             boo = True
             while boo:
                 for child in children:
-                    if d.is_subgraph_isomorphic(
+                    if child.group is None or d.is_subgraph_isomorphic(
                         child.group, generate_initial_map=True, save_order=True
                     ):
                         children = child.children
