@@ -1837,48 +1837,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
     def trim_tree(self):
         """
         Many of the tree extension sets improve the split, but do not change predictions
-        this function 1) merges nodes with their parents if they can be removed without affecting classifications
-        2) merges nodes with their parents if they do not result in different predictions
+        this function merges nodes with their parents if they do not result in different predictions
         """
-
-        self.datum_truth_map = {datum:[getattr(n,"rule") for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
-        self.datum_node_map = {datum:[n for n in self.mol_node_maps[datum]["nodes"]] for datum in self.datums}
-
-        check_nodes = True
-        while check_nodes:
-            check_nodes = False
-            items_to_delete = []
-            items_to_delete_values = []
-            for name,node in self.nodes.items():
-                if node.rule or node.parent is None:
-                    continue
-                break_loop = False
-                for k, datum in enumerate(self.datums):
-                    boos = self.datum_truth_map[datum]
-                    nodes = self.datum_node_map[datum]
-                    c = boos.count(False)
-                    for i in range(len(nodes)):
-                        if not datum.value and c == 1: #classification at this node matters for proper classification of this training item
-                            break_loop = True
-                            break
-                    if break_loop:
-                        break
-                else:
-                    items_to_delete.append(node)
-                    items_to_delete_values.append(node.items)
-                    
-            if items_to_delete:
-                ind = np.argmin(np.array(items_to_delete_values))
-                node = items_to_delete[ind]
-                logging.info(f"Deleting node {node.name} because unnecessary for classification")
-                node.parent.children.remove(node)
-                node.parent.children.extend(node.children)
-                node.parent.items += node.items
-                for n in items_to_delete.children:
-                    n.parent = items_to_delete.parent
-                check_nodes = True
-        
-        #merge nodes with parents that give same predictions 
         self.setup_data(data=self.datums)
         to_delete = []
         boo = True
