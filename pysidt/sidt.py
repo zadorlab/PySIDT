@@ -25,7 +25,10 @@ class Rule:
         self.comment = comment 
         
     def __repr__(self) -> str:
-        return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data}, comment={self.comment})"
+        if self.uncertainty:
+            return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data}, comment={self.comment})"
+        else:
+            return f"{self.value} (N={self.num_data}, comment={self.comment})"
 
 
 class Node:
