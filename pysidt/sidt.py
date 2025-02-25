@@ -142,6 +142,7 @@ class SubgraphIsomorphicDecisionTree:
         self.max_structures_to_generate_extensions = max_structures_to_generate_extensions
         self.choose_extension_based_on_subsamples = choose_extension_based_on_subsamples
         self.stuctures_for_extension_generation = None 
+        self.node_uncertainties = None
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
