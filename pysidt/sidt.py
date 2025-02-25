@@ -480,7 +480,7 @@ class SubgraphIsomorphicDecisionTree:
             if node.rule.uncertainty is None:
                 node.rule.uncertainty = node.parent.rule.uncertainty
 
-    def evaluate(self, mol):
+    def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
@@ -496,9 +496,23 @@ class SubgraphIsomorphicDecisionTree:
                     node = child
                     break
             else:
-                return node.rule
+                if trace and estimate_uncertainty:
+                    return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
+                elif estimate_uncertainty:
+                    return node.rule.value, np.sqrt(node.rule.uncertainty)
+                elif trace:
+                    return node.rule.value, node.name
+                else:
+                    return node.rule
 
-        return node.rule
+        if trace and estimate_uncertainty:
+            return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
+        elif estimate_uncertainty:
+            return node.rule.value, np.sqrt(node.rule.uncertainty)
+        elif trace:
+            return node.rule.value, node.name
+        else:
+            return node.rule
 
     def check_subgraph_isomorphic(self):
         for node in self.nodes.values():
