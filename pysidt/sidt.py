@@ -405,7 +405,7 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True):
+    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False):
         """
         generate nodes for the tree based on the supplied data
         """
@@ -439,7 +439,10 @@ class SubgraphIsomorphicDecisionTree:
             else:
                 self.extend_tree_from_node(node)
             node = self.select_node()
-
+        
+        if scale_uncertainties:
+            self.scale_uncertainties(validation_set=validation_set)
+        
     def fit_tree(self, data=None):
         """
         fit rule for each node
@@ -893,6 +896,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         max_nodes=None,
         postpruning_based_on_val=True,
         alpha=0.1,
+        scale_uncertainties=False,
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -971,7 +975,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     node.children.remove(child)
             for n,node in self.nodes.items():
                 node.rule = self.best_rule_map[n]
-                
+        
+        if scale_uncertainties:
+            self.scale_uncertainties()
+         
     def fit_tree(self, data=None, check_data=True, alpha=0.1):
         """
         fit rule for each node
