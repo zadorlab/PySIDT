@@ -11,6 +11,7 @@ import numpy as np
 import logging
 import json
 from sklearn import linear_model
+from scipy.optimize import minimize
 import scipy.sparse as sp
 import scipy
 
@@ -141,6 +142,7 @@ class SubgraphIsomorphicDecisionTree:
         self.max_structures_to_generate_extensions = max_structures_to_generate_extensions
         self.choose_extension_based_on_subsamples = choose_extension_based_on_subsamples
         self.stuctures_for_extension_generation = None 
+        self.node_uncertainties = None
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -404,7 +406,7 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True):
+    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False):
         """
         generate nodes for the tree based on the supplied data
         """
@@ -438,7 +440,10 @@ class SubgraphIsomorphicDecisionTree:
             else:
                 self.extend_tree_from_node(node)
             node = self.select_node()
-
+        
+        if scale_uncertainties:
+            self.scale_uncertainties(validation_set=validation_set)
+        
     def fit_tree(self, data=None):
         """
         fit rule for each node
@@ -479,7 +484,7 @@ class SubgraphIsomorphicDecisionTree:
             if node.rule.uncertainty is None:
                 node.rule.uncertainty = node.parent.rule.uncertainty
 
-    def evaluate(self, mol):
+    def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
         Evaluate tree for a given possibly labeled mol
         """
@@ -495,9 +500,23 @@ class SubgraphIsomorphicDecisionTree:
                     node = child
                     break
             else:
-                return node.rule
+                if trace and estimate_uncertainty:
+                    return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
+                elif estimate_uncertainty:
+                    return node.rule.value, np.sqrt(node.rule.uncertainty)
+                elif trace:
+                    return node.rule.value, node.name
+                else:
+                    return node.rule
 
-        return node.rule
+        if trace and estimate_uncertainty:
+            return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
+        elif estimate_uncertainty:
+            return node.rule.value, np.sqrt(node.rule.uncertainty)
+        elif trace:
+            return node.rule.value, node.name
+        else:
+            return node.rule
 
     def check_subgraph_isomorphic(self):
         for node in self.nodes.values():
@@ -517,6 +536,45 @@ class SubgraphIsomorphicDecisionTree:
             self.r_site,
             self.r_morph,
         )
+    
+    def scale_uncertainties(self,validation_set=None):
+        """
+        rescales uncertainty predictions by a constant to better match validation errors
+        """
+        if validation_set is not None:
+            self.validation_set = validation_set
+        
+        assert self.validation_set is not None
+        
+        if self.node_uncertainties is None:
+            self.node_uncertainties = {node.name: node.rule.uncertainty for node in self.nodes.values()}
+        
+        val_predictions_uncertainties = [self.evaluate(d.mol, estimate_uncertainty=True) for d in self.validation_set]
+        val_predictions = [pred_unc[0] for pred_unc in val_predictions_uncertainties]
+        val_uncertainties = [pred_unc[1] for pred_unc in val_predictions_uncertainties]
+        val_error = [val_predictions[i] - self.validation_set[i].value for i in range(len(self.validation_set))]
+        initial_scaling_factor = 1.0
+        
+        def get_bounded_fraction(errs, uncs, confidence_level):
+            t = scipy.stats.norm.ppf((1 + confidence_level) / 2)
+            return np.sum(uncs * t >= np.abs(errs)) / len(errs)
+
+        def get_calibration_curve(errs, uncs, n=50):
+            confidence_levels = np.linspace(0, 1, n)
+            proportion_correct = [get_bounded_fraction(errs, uncs, confidence_level) for confidence_level in confidence_levels]
+            return confidence_levels, proportion_correct
+        
+        def objective_function(scaling_factor, errs, uncs, n = 500):
+            scaled_uncs = scaling_factor * uncs
+            confidence_levels, proportion_correct = get_calibration_curve(errs, scaled_uncs, n)
+            return np.nansum((proportion_correct - confidence_levels)**2)
+        
+        result = minimize(objective_function, initial_scaling_factor, args=(val_error, val_uncertainties), method="Nelder-Mead")
+        optimized_scaling_factor = result.x[0]
+        logging.info(f"Scaling Node Uncertainties by Optimized Scaling Factor {optimized_scaling_factor**2:.3f}")
+        self.node_uncertainties.update({name: self.node_uncertainties[name] * optimized_scaling_factor**2 for i, name in enumerate(self.nodes)})
+        for i, node in enumerate(self.nodes.keys()):
+            self.nodes[node].rule.uncertainty = self.node_uncertainties[node]
 
 def to_dict(obj):
     out_dict = dict()
@@ -839,6 +897,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         max_nodes=None,
         postpruning_based_on_val=True,
         alpha=0.1,
+        scale_uncertainties=False,
     ):
         """
         generate nodes for the tree based on the supplied data
@@ -917,7 +976,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     node.children.remove(child)
             for n,node in self.nodes.items():
                 node.rule = self.best_rule_map[n]
-
+        
+        if scale_uncertainties:
+            self.scale_uncertainties()
+         
     def fit_tree(self, data=None, check_data=True, alpha=0.1):
         """
         fit rule for each node
@@ -929,6 +991,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.fit_rule(alpha=alpha)
 
         self.estimate_uncertainty()
+        
 
     def fit_rule(self, alpha=0.1):
         max_depth = max([node.depth for node in self.nodes.values()])
@@ -1026,7 +1089,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         atol = rule_mean*rel_node_dof_tolerance
         self.abs_node_dof_tolerance = atol
         extra_dofs = len([n for n in rules if abs(n)<atol]) #count node rule values driven to zero by lasso
-        
+        node_uncertainties = ()
         if A.shape[1] != 1 and W is not None and len(self.datums) - len(nodes) + extra_dofs > 0:
             node_uncertainties = (
                 np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
@@ -1085,7 +1148,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 node.rule.uncertainty = node.parent.rule.uncertainty
             elif node.rule.num_data == 0:
                 node.rule.uncertainty = 0.0 #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
-
+                
+        
+        
     def assign_depths(self):
         root = self.root
         _assign_depths(root)
@@ -1909,3 +1974,5 @@ def _assign_depths(node, depth=0):
 
 def is_prepruned_by_uncertainty(node):
     return node.rule.uncertainty <= min(item.uncertainty for item in node.items)
+
+
