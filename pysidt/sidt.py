@@ -507,7 +507,7 @@ class SubgraphIsomorphicDecisionTree:
                 elif trace:
                     return node.rule.value, node.name
                 else:
-                    return node.rule
+                    return node.rule.value
 
         if trace and estimate_uncertainty:
             return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
@@ -516,7 +516,7 @@ class SubgraphIsomorphicDecisionTree:
         elif trace:
             return node.rule.value, node.name
         else:
-            return node.rule
+            return node.rule.value
 
     def check_subgraph_isomorphic(self):
         for node in self.nodes.values():
