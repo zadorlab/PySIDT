@@ -583,7 +583,7 @@ def to_dict(obj):
     for attr in attrs:
         val = getattr(obj, attr)
 
-        if callable(val) or val == getattr(obj.__class__(), attr):
+        if not isinstance(val,list) and not isinstance(val,np.ndarray) and not isinstance(val,dict) and (callable(val) or val == getattr(obj.__class__(), attr)):
             continue
 
         try:
