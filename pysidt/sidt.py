@@ -351,7 +351,7 @@ class SubgraphIsomorphicDecisionTree:
         )
         self.nodes[name] = node
         parent.children.append(node)
-        if grpc:
+        if grpc and all(st.mol.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
             cextname = ""
@@ -1292,7 +1292,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
 
         logging.info("adding node {}".format(name))
 
-        if grpc:
+        if grpc and all(st.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
+            assert grpc.is_subgraph_isomorphic(parent.group,generate_initial_map=True,save_order=True)
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
             cextname = ""
@@ -1687,7 +1688,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
 
         logging.info("adding node {}".format(name))
         
-        if grpc:
+        if grpc and all(st.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
             class_true = 0
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
