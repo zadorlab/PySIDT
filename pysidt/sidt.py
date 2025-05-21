@@ -753,6 +753,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_site=None,
         r_morph=None,
         uncertainty_prepruning=False,
+        weigh_node_selection_by_occurrence=True,
     ):
         if nodes is None:
             nodes = dict()
@@ -786,6 +787,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             assert len(decomposition) == len(root_group)
         
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
+        self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
         self.decomposition = decomposition
         self.mol_submol_node_maps = None
         self.data_delta = None
@@ -1211,14 +1213,24 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes and node.name not in self.new_nodes]
 
         if len(selectable_nodes) > num:
-            rulevals = [
-                self.node_uncertainties[node.name]
-                if len(node.items) > 1
-                and not (node.name in self.new_nodes)
-                and not (node.name in self.skip_nodes)
-                else 0.0
-                for node in selectable_nodes
-            ]
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    self.node_uncertainties[node.name] * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    self.node_uncertainties[node.name]
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
             inds = np.argsort(rulevals)
             maxinds = inds[-num:]
             nodes = [
