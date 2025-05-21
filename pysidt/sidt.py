@@ -351,7 +351,7 @@ class SubgraphIsomorphicDecisionTree:
         )
         self.nodes[name] = node
         parent.children.append(node)
-        if grpc:
+        if grpc and all(st.mol.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
             cextname = ""
@@ -583,7 +583,7 @@ def to_dict(obj):
     for attr in attrs:
         val = getattr(obj, attr)
 
-        if callable(val) or val == getattr(obj.__class__(), attr):
+        if not isinstance(val,list) and not isinstance(val,np.ndarray) and not isinstance(val,dict) and (callable(val) or val == getattr(obj.__class__(), attr)):
             continue
 
         try:
@@ -753,6 +753,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_site=None,
         r_morph=None,
         uncertainty_prepruning=False,
+        weigh_node_selection_by_occurrence=True,
     ):
         if nodes is None:
             nodes = dict()
@@ -786,6 +787,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             assert len(decomposition) == len(root_group)
         
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
+        self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
         self.decomposition = decomposition
         self.mol_submol_node_maps = None
         self.data_delta = None
@@ -1001,8 +1003,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         weights = self.weights
         W = self.W
 
-        W = self.W
-
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
 
@@ -1213,14 +1213,24 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes and node.name not in self.new_nodes]
 
         if len(selectable_nodes) > num:
-            rulevals = [
-                self.node_uncertainties[node.name]
-                if len(node.items) > 1
-                and not (node.name in self.new_nodes)
-                and not (node.name in self.skip_nodes)
-                else 0.0
-                for node in selectable_nodes
-            ]
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    self.node_uncertainties[node.name] * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    self.node_uncertainties[node.name]
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
             inds = np.argsort(rulevals)
             maxinds = inds[-num:]
             nodes = [
@@ -1292,7 +1302,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
 
         logging.info("adding node {}".format(name))
 
-        if grpc:
+        if grpc and all(st.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
+            assert grpc.is_subgraph_isomorphic(parent.group,generate_initial_map=True,save_order=True)
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
             cextname = ""
@@ -1687,7 +1698,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
 
         logging.info("adding node {}".format(name))
         
-        if grpc:
+        if grpc and all(st.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
             class_true = 0
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]

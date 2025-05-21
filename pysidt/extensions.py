@@ -371,6 +371,7 @@ def get_extensions(
         RnH = R[:]
         RnH.remove(ATOMTYPES["H"])
         RxnH = R[:]
+        RxnH.remove(ATOMTYPES["H"])
     elif ATOMTYPES["X"] in r:
         RxnH = r[:]
         R = r[:]
@@ -410,7 +411,7 @@ def get_extensions(
                     elif typ[0].label == "R!H":
                         extents.extend(
                             specify_atom_extensions(
-                                grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(R))
+                                grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RnH))
                             )
                         )
                     elif typ[0].label == "Rx":
