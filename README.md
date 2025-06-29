@@ -1,4 +1,4 @@
-# <img align="top" style="width:300px;height:125px;" src="https://github.com/zadorlab/PySIDT/blob/main/PySIDT_logo.png"> 
+# <img align="top" style="width:200px;height:80px;" src="https://github.com/zadorlab/PySIDT/blob/main/PySIDT_logo.png"> 
 PySIDT is a Python package for training and running inference on subgraph isomorphic decision trees (SIDTs) for molecular property prediction as described in <a href="https://doi.org/10.26434/chemrxiv-2024-vbh8g">Johnson et al. 2025</a>. 
 
 SIDTs are graph-based decision trees made of nodes associated with molecular substructures. Inference occurs by descending target molecular structures down the decision tree to nodes with matching subgraph isomorphic substructures and making predictions based on the final (most specific) node matched. SIDTs can perform significantly better on smaller datasets (<10,000 datapoints) than deep neural network based approaches. Being trees of molecular substructures, SIDTs are inherently readable and easy to visualize, making them easy to analyze. They are also straightforward to extend and retrain, facilitate uncertainty estimation, and enable integration of expert knowledge.
