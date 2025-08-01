@@ -155,6 +155,7 @@ class SubgraphIsomorphicDecisionTree:
                 roots = []
                 for i,g in enumerate(root_group):
                     roots.append(Node(group=g, name="Root_"+str(i), parent=self.root, depth=1))
+                self.root.children = roots
                 self.nodes = {n.name:n for n in roots}
                 self.nodes["Root"] = self.root
                 if initial_root_splits:
