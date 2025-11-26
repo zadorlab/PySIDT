@@ -62,6 +62,7 @@ def get_extension_edge(
     r_site=None,
     r_morph=None,
     r_ncoord=None,
+    r_label=None,
     just_reg_dim=False, #determine reg_dims for group only
 ):
     """
@@ -87,6 +88,8 @@ def get_extension_edge(
         r_site = []
     if r_morph is None:
         r_morph = []
+    if r_label is None:
+        r_label = None
 
     out_exts = [[]]
     grps = [[group]]
@@ -108,6 +111,7 @@ def get_extension_edge(
             r_site_full=r_site,
             r_morph_full=r_morph,
             r_ncoord_full=r_ncoord,
+            r_label=r_label,
             n_strucs_min=n_strucs_min,
         )
 
@@ -372,6 +376,7 @@ def get_extensions(
     r_site_full=[],
     r_morph_full=[],
     r_ncoord_full=[],
+    r_label=[],
     basename="",
     atm_ind=None,
     atm_ind2=None,
@@ -422,6 +427,9 @@ def get_extensions(
             r_ncoord = [x for y in r_ncoord_full for x in y]
         else:
             r_ncoord = r_ncoord_full[:]
+    
+    if r_label == []:
+        r_label = ['']
     
     # generate appropriate r and r!H
     if r is None:
@@ -636,7 +644,7 @@ def get_extensions(
                 extents.extend(specify_ring_extensions(grp, i, basename))
 
             extents.extend(
-                specify_external_new_bond_extensions(grp, i, basename, r_bonds)
+                specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label)
             )
             for j, atm2 in enumerate(atoms):
                 if j < i and not grp.has_bond(atm, atm2):
@@ -852,7 +860,7 @@ def get_extensions(
         if not atm.reg_dim_r[0] and "inRing" not in atm.props:
             extents.extend(specify_ring_extensions(grp, i, basename))
 
-        extents.extend(specify_external_new_bond_extensions(grp, i, basename, r_bonds))
+        extents.extend(specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label))
         for j, atm2 in enumerate(atoms):
             if j < i and not grp.has_bond(atm, atm2):
                 extents.extend(
@@ -1237,42 +1245,43 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
         ]
 
 
-def specify_external_new_bond_extensions(grp, i, basename, r_bonds):
+def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
     """
     generates extensions for the creation of a bond (of undefined order) between
     an atom and a new atom that is not H
     """
     # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
-
     label_list = []
+    grps = []
+    for alabel in r_label:
+        ga = GroupAtom([ATOMTYPES["Rx!H"]])
+        ga.label = alabel
+        newgrp = deepcopy(grp)
+        newgrp.add_atom(ga)
+        j = newgrp.atoms.index(ga)
+        newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
+        atom_type = newgrp.atoms[i].atomtype
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
 
-    ga = GroupAtom([ATOMTYPES["Rx!H"]])
-    newgrp = deepcopy(grp)
-    newgrp.add_atom(ga)
-    j = newgrp.atoms.index(ga)
-    newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
-    atom_type = newgrp.atoms[i].atomtype
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    return [
-        (
-            newgrp,
-            None,
-            basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
-            "extNewBondExt",
-            (len(newgrp.atoms) - 1,),
+        grps.append(
+            (
+                newgrp,
+                None,
+                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                "extNewBondExt",
+                (len(newgrp.atoms) - 1,),
+            )
         )
-    ]
-
+    return grps
 
 def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full):
     """
