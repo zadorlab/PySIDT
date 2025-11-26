@@ -34,7 +34,7 @@ def simple_regularization(tree, node, Rx, Rbonds, Run, Rsite, Rmorph, Rncoord=[]
             atms = []
             initial_map = dict()
             for atom in child.group.atoms:
-                if atom.label and atom.label != '':
+                if atom.label and atom.label != '' and atom.label != "*S":
                     L = [a for a in node.group.atoms if a.label == atom.label]
                     if L == []:
                         return False
