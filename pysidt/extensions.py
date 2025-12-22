@@ -2,6 +2,7 @@ import logging
 from copy import deepcopy
 
 import numpy as np
+import itertools
 
 from molecule.molecule.atomtype import ATOMTYPES
 from molecule.molecule.element import bde_elements
@@ -1265,16 +1266,63 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
             atom_type_str = ""
         else:
             atom_type_str = atom_type[0].label
-
-        grps.append(
-            (
-                newgrp,
-                None,
-                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
-                "extNewBondExt",
-                (len(newgrp.atoms) - 1,),
+            
+        if alabel == "*S":
+            add_atom_ind = newgrp.atoms.index(ga)
+            surf_atom_inds = [newgrp.atoms.index(a) for a in newgrp.atoms if a.label == "*S" and a is not ga]
+            for i in range(len(surf_atom_inds)+1):
+                for at_inds in itertools.combinations(surf_atom_inds,i):
+                    ngrp = deepcopy(newgrp)
+                    nalabel = ""
+                    for aind in at_inds:
+                        ngrp.add_bond(GroupBond(ngrp.atoms[aind], ngrp.atoms[add_atom_ind], r_bonds))
+                        atom_type_i = ngrp.atoms[aind].atomtype
+                        atom_type_j = ngrp.atoms[add_atom_ind].atomtype
+                        
+                        label_list = []
+                        if len(atom_type_i) > 1:
+                            atom_type_i_str = ""
+                            for k in atom_type_i:
+                                label_list.append(k.label)
+                            for k in sorted(label_list):
+                                atom_type_i_str += k
+                        elif len(atom_type_i) == 0:
+                            atom_type_i_str = ""
+                        else:
+                            atom_type_i_str = atom_type_i[0].label
+                        if len(atom_type_j) > 1:
+                            atom_type_j_str = ""
+                            for k in atom_type_j:
+                                label_list.append(k.label)
+                            for p in sorted(label_list):
+                                atom_type_j_str += p
+                        elif len(atom_type_j) == 0:
+                            atom_type_j_str = ""
+                        else:
+                            atom_type_j_str = atom_type_j[0].label
+                            
+                        nalabel +=  "_Int-" + str(aind + 1) + atom_type_i_str + "-" + str(add_atom_ind + 1) + atom_type_j_str
+                    
+                    grps.append(
+                        (
+                            ngrp,
+                            None,
+                            basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel + nalabel,
+                            "extNewBondExt",
+                            (len(newgrp.atoms) - 1,),
+                        )
+                    )
+                    
+        else:
+            grps.append(
+                (
+                    newgrp,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                )
             )
-        )
     return grps
 
 def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full):
