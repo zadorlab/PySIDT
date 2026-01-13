@@ -1270,7 +1270,7 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
         if alabel == "*S":
             add_atom_ind = newgrp.atoms.index(ga)
             surf_atom_inds = [newgrp.atoms.index(a) for a in newgrp.atoms if a.label == "*S" and a is not ga]
-            for i in range(len(surf_atom_inds)+1):
+            for i in range(3):
                 for at_inds in itertools.combinations(surf_atom_inds,i):
                     ngrp = deepcopy(newgrp)
                     nalabel = ""
