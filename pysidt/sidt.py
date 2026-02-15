@@ -775,6 +775,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_morph=None,
         uncertainty_prepruning=False,
         weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
     ):
         if nodes is None:
             nodes = dict()
@@ -802,6 +803,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_site=r_site,
             r_morph=r_morph,
             uncertainty_prepruning=uncertainty_prepruning,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
         )
 
         if root_group and (isinstance(decomposition,list) or isinstance(root_group,list)):
