@@ -913,7 +913,7 @@ def specify_atom_extensions(grp, i, basename, r, r_full):
         else:
             r_spc_full += [[x] for x in sum(r_spc_full,[]) if [x] not in r_spc_full]
     else:
-        r_spc_full = [x for x in r_full if x in r]
+        r_spc_full = [[x] for x in r_full if x in r]
     for item in r_spc_full:
         g = deepcopy(grp)
         grpc = deepcopy(grp)
