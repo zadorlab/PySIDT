@@ -25,6 +25,9 @@ def split_mols(data, newgrp):
     and a list of the indices of all of the reactions
     associated with the new group
     """
+    if len(data) == 0:
+        return [],[]
+    
     new = []
     comp = []
 
