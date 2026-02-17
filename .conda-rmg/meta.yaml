@@ -1,0 +1,38 @@
+# For conda build
+package:
+  name: pysidt-rmg
+  version: 1.1.0
+
+source:
+  path: ../
+
+build:
+  noarch: python
+  number: {{ environ.get('GIT_DESCRIBE_NUMBER', 0) }}
+
+requirements:
+  build:
+    - python
+  host:
+    - python
+    - jupyter
+    - matplotlib
+    - nose
+    - numpy >=1.10.0,<2
+    - pydot
+    - scikit-learn
+    - scipy
+  run:
+    - python
+    - jupyter
+    - matplotlib
+    - nose
+    - numpy >=1.10.0,<2
+    - pydot
+    - scikit-learn
+    - scipy
+
+about:
+  home: https://github.com/zadorlab/PySIDT
+  license: MIT
+  summary: "Subgraph Isomorphic Decision Trees for Molecular Property Prediction"
