@@ -1,4 +1,7 @@
-from molecule.molecule import Molecule
+try:
+    from molecule.molecule import Molecule
+except:
+    from rmgpy.molecule import Molecule
 
 
 def data_matches_node(node, data):
