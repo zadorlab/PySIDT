@@ -16,3 +16,23 @@ def data_matches_node(node, data):
             return False
     else:
         return True
+
+def find_shortest_paths(start, end, path=None):
+    paths = [[start]]
+    outpaths = []
+    while paths != []:
+        newpaths = []
+        for path in paths:
+            for node in path[-1].edges.keys():
+                if node in path:
+                    continue
+                elif node is end:
+                    outpaths.append(path[:]+[node])
+                elif outpaths == []:
+                    newpaths.append(path[:]+[node])
+        if outpaths:
+            return outpaths
+        else:
+            paths = newpaths
+    
+    return None
