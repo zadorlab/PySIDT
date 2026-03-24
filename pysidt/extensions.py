@@ -14,6 +14,8 @@ except:
     from rmgpy.molecule.group import GroupAtom, GroupBond
     from rmgpy.molecule.molecule import Molecule
 
+from pysidt.utils import find_shortest_paths
+
 
 def split_mols(data, newgrp):
     """
@@ -67,6 +69,7 @@ def get_extension_edge(
     r_ncoord=None,
     r_label=None,
     just_reg_dim=False, #determine reg_dims for group only
+    max_ring_gen_size=None,
 ):
     """
     finds the set of all extension groups to parent such that
@@ -116,13 +119,14 @@ def get_extension_edge(
             r_ncoord_full=r_ncoord,
             r_label=r_label,
             n_strucs_min=n_strucs_min,
+            max_ring_gen_size=max_ring_gen_size,
         )
 
         reg_dict = dict()
         ext_inds = []
         for i, (grp2, grpc, name, typ, indc) in enumerate(exts):
             if (
-                typ != "intNewBondExt"
+                typ != "intNewBridgeExt"
                 and typ != "extNewBondExt"
                 and (typ, indc) not in reg_dict.keys()
             ):
@@ -162,7 +166,7 @@ def get_extension_edge(
                     )
 
             elif boo:  # this extension matches all reactions (regularization dim)
-                if typ == "intNewBondExt" or typ == "extNewBondExt":
+                if typ == "intNewBridgeExt" or typ == "extNewBondExt":
                     # these are bond formation extensions, we want to expand these until we get splits
                     ext_inds.append(i)
                 elif typ == "atomExt":
@@ -208,7 +212,7 @@ def get_extension_edge(
             if first_time and not node_children:
                 # parent
                 if (
-                    typr != "intNewBondExt" and typr != "extNewBondExt"
+                    typr != "intNewBridgeExt" and typr != "extNewBondExt"
                 ):  # these dimensions should be regularized
                     if typr == "atomExt":
                         grp.atoms[indcr[0]].reg_dim_atm = list(reg_val)
@@ -229,7 +233,7 @@ def get_extension_edge(
 
             # extensions being sent out
             if (
-                typr != "intNewBondExt" and typr != "extNewBondExt"
+                typr != "intNewBridgeExt" and typr != "extNewBondExt"
             ):  # these dimensions should be regularized
                 for grp2, grpc, name, typ, indc in out_exts[-1]:  # returned groups
                     if typr == "atomExt":
@@ -280,7 +284,7 @@ def get_extension_edge(
         ):  # have to label the regularization dimensions in all relevant groups
             reg_val = reg_dict[(typr, indcr)]
             if (
-                typr != "intNewBondExt" and typr != "extNewBondExt"
+                typr != "intNewBridgeExt" and typr != "extNewBondExt"
             ):  # these dimensions should be regularized
                 for ind2 in ext_inds:  # groups for expansion
                     grp2, grpc, name, typ, indc = exts[ind2]
@@ -384,6 +388,7 @@ def get_extensions(
     atm_ind=None,
     atm_ind2=None,
     n_strucs_min=None,
+    max_ring_gen_size=None,
 ):
     """
     generate all allowed group extensions and their complements
@@ -650,10 +655,10 @@ def get_extensions(
                 specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label)
             )
             for j, atm2 in enumerate(atoms):
-                if j < i and not grp.has_bond(atm, atm2):
+                if j <= i and not grp.has_bond(atm, atm2):
                     extents.extend(
                         specify_internal_new_bond_extensions(
-                            grp, i, j, n_strucs_min, basename, r_bonds
+                            grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size,
                         )
                     )
                 elif j < i:
@@ -678,10 +683,10 @@ def get_extensions(
         j = atm_ind2
         atm = atoms[i]
         atm2 = atoms[j]
-        if j < i and not grp.has_bond(atm, atm2):
+        if j <= i and not grp.has_bond(atm, atm2):
             extents.extend(
                 specify_internal_new_bond_extensions(
-                    grp, i, j, n_strucs_min, basename, r_bonds
+                    grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size,
                 )
             )
         if grp.has_bond(atm, atm2):
@@ -865,10 +870,10 @@ def get_extensions(
 
         extents.extend(specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label))
         for j, atm2 in enumerate(atoms):
-            if j < i and not grp.has_bond(atm, atm2):
+            if j <= i and not grp.has_bond(atm, atm2):
                 extents.extend(
                     specify_internal_new_bond_extensions(
-                        grp, i, j, n_strucs_min, basename, r_bonds
+                        grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size,
                     )
                 )
             elif j < i:
@@ -1190,20 +1195,30 @@ def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full):
 
     return grps
 
-def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds):
+def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=None):
     """
     generates extensions for creation of a bond (of undefined order)
     between two atoms indexed i,j that already exist in the group and are unbonded
     """
     # cython.declare(newgrp=Group)
-
+    if i == j:
+        if max_ring_gen_size is None:
+            return []
+        pathlen = 1
+    else:
+        paths = find_shortest_paths(grp.atoms[i],grp.atoms[j])
+        if paths is None:
+            pathlen = None
+        else:
+            pathlen = len(paths[0])
+    
+    if pathlen is None and n_strucs_min == len(grp.split()): #internal bridge will reduce below minimum number of independent structures
+        return []
+    
     label_list = []
-
-    newgrp = deepcopy(grp)
-    newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
-
-    atom_type_i = newgrp.atoms[i].atomtype
-    atom_type_j = newgrp.atoms[j].atomtype
+        
+    atom_type_i = grp.atoms[i].atomtype
+    atom_type_j = grp.atoms[j].atomtype
 
     if len(atom_type_i) > 1:
         atom_type_i_str = ""
@@ -1225,28 +1240,61 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
         atom_type_j_str = ""
     else:
         atom_type_j_str = atom_type_j[0].label
+        
+    if max_ring_gen_size is None: #just internal bond extensions
+        newgrp = deepcopy(grp)
+        newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
 
-    if (
-        len(newgrp.split()) < n_strucs_min
-    ):  # if this formed a bond between two seperate groups in the
-        return []
-    else:
         return [
-            (
-                newgrp,
-                None,
-                basename
-                + "_Int-"
-                + str(i + 1)
-                + atom_type_i_str
-                + "-"
-                + str(j + 1)
-                + atom_type_j_str,
-                "intNewBondExt",
-                (i, j),
-            )
-        ]
-
+                (
+                    newgrp,
+                    None,
+                    basename
+                    + "_Int-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + "-"
+                    + str(j + 1)
+                    + atom_type_j_str
+                    + "-Br0",
+                    "intNewBridgeExt",
+                    (i, j),
+                )
+            ]
+    else:
+        grps = []
+        for bridgelen in range(max_ring_gen_size-pathlen+1): #includes bridgelen == 0
+            if i == j and bridgelen < 2: #this is no change from the original group or external bond creation
+                continue
+            newgrp = deepcopy(grp)
+            tail_atom = newgrp.atoms[i]
+            head_atom = newgrp.atoms[j]
+            for k in range(bridgelen): #create first ring
+                newatm = GroupAtom([ATOMTYPES['R!H']])
+                newgrp.add_atom(newatm)
+                bd = GroupBond(tail_atom,newatm,order=r_bonds)
+                newgrp.add_bond(bd)
+                tail_atom = newatm
+            else:
+                bd = GroupBond(tail_atom,head_atom,order=r_bonds)
+                newgrp.add_bond(bd)
+            
+            grps.append((
+                    newgrp,
+                    None,
+                    basename
+                    + "_Int-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + "-"
+                    + str(j + 1)
+                    + atom_type_j_str
+                    + "-Br"+str(bridgelen),
+                    "intNewBridgeExt",
+                    (i, j),
+                ))
+    
+    return grps    
 
 def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
     """
