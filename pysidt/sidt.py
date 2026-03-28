@@ -119,6 +119,7 @@ class SubgraphIsomorphicDecisionTree:
         r_morph=None,
         uncertainty_prepruning=False,
         max_nodes=np.inf,
+        reverse_extension_generation_allowed=True
     ):
         if nodes is None:
             nodes = {}
@@ -150,6 +151,7 @@ class SubgraphIsomorphicDecisionTree:
         self.choose_extension_based_on_subsamples = choose_extension_based_on_subsamples
         self.stuctures_for_extension_generation = None 
         self.node_uncertainties = None
+        self.reverse_extension_generation_allowed = reverse_extension_generation_allowed
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -270,7 +272,7 @@ class SubgraphIsomorphicDecisionTree:
             node.group.clear_reg_dims()
             return self.generate_extensions(node, recursing=True)
 
-        if not out:
+        if not out and self.reverse_extension_generation_allowed:
             logging.info("forward extension generation failed, using reverse extension generation")
             grps = generate_extensions_reverse(node.group,structs)
             name = node.name+"_Revgen"
@@ -762,6 +764,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_morph=None,
         uncertainty_prepruning=False,
         weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
     ):
         if nodes is None:
             nodes = dict()
@@ -789,6 +792,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_site=r_site,
             r_morph=r_morph,
             uncertainty_prepruning=uncertainty_prepruning,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
         )
 
         if root_group and (isinstance(decomposition,list) or isinstance(root_group,list)):
@@ -1481,6 +1485,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         r_site=None,
         r_morph=None,
         fract_threshold_to_predict_true=0.5,
+        reverse_extension_generation_allowed=True,
     ):
         if nodes is None:
             nodes = dict()
@@ -1509,6 +1514,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
             )
 
         self.fract_threshold_to_predict_true = fract_threshold_to_predict_true
