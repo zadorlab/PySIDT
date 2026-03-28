@@ -155,6 +155,7 @@ class SubgraphIsomorphicDecisionTree:
                 roots = []
                 for i,g in enumerate(root_group):
                     roots.append(Node(group=g, name="Root_"+str(i), parent=self.root, depth=1))
+                self.root.children = roots
                 self.nodes = {n.name:n for n in roots}
                 self.nodes["Root"] = self.root
                 if initial_root_splits:
@@ -859,18 +860,23 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                         if not d.is_subgraph_isomorphic(
                             self.root.group, generate_initial_map=True, save_order=True
                         ):
-                            logging.info("Datum Submol did not match Root node:")
-                            logging.info(d.to_adjacency_list())
+                            logging.error("Datum Submol did not match Root node:")
+                            logging.error(d.to_adjacency_list())
                             raise ValueError
                     else:
                         for root_child in self.root.children:
-                            if d.is_subgraph_isomorphic(
-                                root_child.group, generate_initial_map=True, save_order=True
-                            ):
-                                break
+                            try:
+                                if sorted([k if not isinstance(v,list) else k*len(v) for k,v in root_child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in d.get_all_labeled_atoms().items()]) and d.is_subgraph_isomorphic(
+                                    root_child.group, generate_initial_map=True, save_order=True
+                                ):
+                                    break
+                            except Exception as e:
+                                logging.error(d.to_adjacency_list())
+                                logging.error(root_child.group.to_adjacency_list())
+                                raise e
                         else:
-                            logging.info("Datum Submol did not match Root nodes:")
-                            logging.info(d.to_adjacency_list())
+                            logging.error("Datum Submol did not match Root nodes:")
+                            logging.error(d.to_adjacency_list())
                             raise ValueError
 
         self.clear_data()
@@ -1162,7 +1168,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         data_to_add = {child: [] for child in node.children}
         for m in node.items:
             for child in node.children:
-                if m.is_subgraph_isomorphic(
+                if sorted([k if not isinstance(v,list) else k*len(v) for k,v in child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in m.get_all_labeled_atoms().items()]) and m.is_subgraph_isomorphic(
                     child.group, generate_initial_map=True, save_order=True
                 ):
                     data_to_add[child].append(m)
@@ -1404,7 +1410,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             boo = True
             while boo:
                 for child in children:
-                    if child.group is None or d.is_subgraph_isomorphic(
+                    if child.group is None or ([k if not isinstance(v,list) else k*len(v) for k,v in child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in d.get_all_labeled_atoms().items()]) and d.is_subgraph_isomorphic(
                         child.group, generate_initial_map=True, save_order=True
                     ):
                         children = child.children
