@@ -117,6 +117,7 @@ class SubgraphIsomorphicDecisionTree:
         r_un=None,
         r_site=None,
         r_morph=None,
+        r_ncoord=None,
         uncertainty_prepruning=False,
         max_nodes=np.inf,
         reverse_extension_generation_allowed=True
@@ -134,7 +135,8 @@ class SubgraphIsomorphicDecisionTree:
             r_site = []
         if r_morph is None:
             r_morph = []
-
+        if r_ncoord is None:
+            r_ncoord = []
         self.nodes = nodes
         self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
@@ -144,6 +146,7 @@ class SubgraphIsomorphicDecisionTree:
         self.r_un = r_un
         self.r_site = r_site
         self.r_morph = r_morph
+        self.r_ncoord = r_ncoord
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
         self.max_nodes = max_nodes
@@ -262,6 +265,7 @@ class SubgraphIsomorphicDecisionTree:
             r_un=self.r_un,
             r_site=self.r_site,
             r_morph=self.r_morph,
+            r_ncoord=self.r_ncoord,
             iter_max=self.iter_max,
             iter_item_cap=self.iter_item_cap,
             just_reg_dim=just_reg_dim

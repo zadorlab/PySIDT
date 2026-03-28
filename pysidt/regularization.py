@@ -234,7 +234,40 @@ def simple_regularization(tree, node, Rx, Rbonds, Run, Rsite, Rmorph, Rncoord=[]
                         atm1.morphology = vals
                         if not data_matches_node(node, data):
                             atm1.morphology = oldvals
+        
+        if Rncoord and "Ncoord" not in atm1.props.keys():
+            atm1.props["Ncoord"] = Rncoord              
+        if (
+            not skip
+            and Rncoord
+            and atm1.reg_dim_ncoord[1] != []
+            and set(atm1.reg_dim_ncoord[1]) != set(atm1.props["Ncoord"])
+        ):
+            if len(atm1.props["Ncoord"]) == 1:
+                pass
+            else:
+                relist = atm1.props["Ncoord"]
+                if relist == []:
+                    relist = Run
+                vals = list(set(relist) & set(atm1.reg_dim_ncoord[1]))
+                assert vals != [], "cannot regularize to empty"
 
+                if all(
+                    [
+                        set(child_map[q][node.group.atoms[i]].props["Ncoord"]) <= set(vals)
+                        if child_map[q][node.group.atoms[i]].props["Ncoord"] != []
+                        else False
+                        for q,child in enumerate(node.children)
+                    ]
+                ):
+                    if not test:
+                        atm1.props["Ncoord"] = vals
+                    else:
+                        oldvals = atm1.props["Ncoord"]
+                        atm1.props["Ncoord"] = vals
+                        if not data_matches_node(node, data):
+                            atm1.props["Ncoord"] = oldvals
+                            
         if (
             not skip
             and atm1.reg_dim_r[1] != []

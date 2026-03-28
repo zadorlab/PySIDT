@@ -61,6 +61,7 @@ def get_extension_edge(
     r_un=None,
     r_site=None,
     r_morph=None,
+    r_ncoord=None,
     just_reg_dim=False, #determine reg_dims for group only
 ):
     """
@@ -106,6 +107,7 @@ def get_extension_edge(
             r_un_full=r_un,
             r_site_full=r_site,
             r_morph_full=r_morph,
+            r_ncoord_full=r_ncoord,
             n_strucs_min=n_strucs_min,
         )
 
@@ -147,6 +149,10 @@ def get_extension_edge(
                     reg_dict[(typ, indc)][0].extend(
                         grp2.get_bond(grp2.atoms[indc[0]], grp2.atoms[indc[1]]).order
                     )
+                elif typ == "coordExt":
+                    reg_dict[(typ, indc)][0].extend(
+                        grp2.atoms[indc[0]].props["Ncoord"]
+                    )
 
             elif boo:  # this extension matches all reactions (regularization dim)
                 if typ == "intNewBondExt" or typ == "extNewBondExt":
@@ -168,6 +174,13 @@ def get_extension_edge(
                     )
                     reg_dict[(typ, indc)][1].extend(
                         grp2.get_bond(grp2.atoms[indc[0]], grp2.atoms[indc[1]]).order
+                    )
+                elif typ == "coordExt":
+                    reg_dict[(typ, indc)][0].extend(
+                        grp2.atoms[indc[0]].props["Ncoord"]
+                    )
+                    reg_dict[(typ, indc)][1].extend(
+                        grp2.atoms[indc[0]].props["Ncoord"]
                     )
                 elif typ == "ringExt":
                     reg_dict[(typ, indc)][1].append(True)
@@ -198,6 +211,8 @@ def get_extension_edge(
                         grp.atoms[indcr[0]].reg_dim_site = list(reg_val)
                     elif typr == "morphExt":
                         grp.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
+                    elif typr == "coordExt":
+                        grp.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
                     elif typr == "ringExt":
                         grp.atoms[indcr[0]].reg_dim_r = list(reg_val)
                     elif typr == "bondExt":
@@ -226,6 +241,10 @@ def get_extension_edge(
                         grp2.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
                         if grpc:
                             grpc.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
+                    elif typr == "coordExt":
+                        grp2.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
+                        if grpc:
+                            grpc.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
                     elif typr == "ringExt":
                         grp2.atoms[indcr[0]].reg_dim_r = list(reg_val)
                         if grpc:
@@ -274,6 +293,10 @@ def get_extension_edge(
                         grp2.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
                         if grpc:
                             grpc.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
+                    elif typr == "coordExt":
+                        grp2.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
+                        if grpc:
+                            grpc.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
                     elif typr == "ringExt":
                         grp2.atoms[indcr[0]].reg_dim_r = list(reg_val)
                         if grpc:
@@ -348,6 +371,7 @@ def get_extensions(
     r_un_full=[0, 1, 2, 3],
     r_site_full=[],
     r_morph_full=[],
+    r_ncoord_full=[],
     basename="",
     atm_ind=None,
     atm_ind2=None,
@@ -392,6 +416,12 @@ def get_extensions(
             r_morph = [x for y in r_morph_full for x in y]
         else:
             r_morph = r_morph_full[:]
+    
+    if r_ncoord_full:
+        if isinstance(r_ncoord_full[0],list):
+            r_ncoord = [x for y in r_ncoord_full for x in y]
+        else:
+            r_ncoord = r_ncoord_full[:]
     
     # generate appropriate r and r!H
     if r is None:
@@ -569,6 +599,37 @@ def get_extensions(
                                     r_morph_full,
                                 )
                             )
+            if r_ncoord_full:
+                if not atm.reg_dim_ncoord[0]:
+                    if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) != 1:
+                        if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                            extents.extend(
+                                specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full)
+                            )
+                        else:
+                            extents.extend(
+                                specify_ncoord_extensions(
+                                    grp, i, basename, atm.props["Ncoord"], r_ncoord_full
+                                )
+                            )
+                else:
+                    if "Ncoord" not in atm.props.keys() or (len(atm.props["Ncoord"]) != 1 and len(atm.reg_dim_ncoord[0]) != 1):
+                        if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                            extents.extend(
+                                specify_ncoord_extensions(
+                                    grp, i, basename, atm.reg_dim_ncoord[0], r_ncoord_full
+                                )
+                            )
+                        else:
+                            extents.extend(
+                                specify_ncoord_extensions(
+                                    grp,
+                                    i,
+                                    basename,
+                                    list(
+                                        set(atm.props["Ncoord"]) & set(atm.reg_dim_ncoord[0])
+                                    ),
+                                    r_ncoord_full,
                                 )
                             )
             if not atm.reg_dim_r[0] and "inRing" not in atm.props:
@@ -761,6 +822,31 @@ def get_extensions(
                                 r_morph_full,
                             )
                         )
+        if r_ncoord_full:
+            if not atm.reg_dim_ncoord:
+                if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) != 1:
+                    if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                        extents.extend(specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full))
+                    else:
+                        extents.extend(
+                            specify_ncoord_extensions(
+                                grp, i, basename, atm.props["Ncoord"], r_ncoord_full
+                            )
+                        )
+            else:
+                if "Ncoord" not in atm.props.keys() or (len(atm.props["Ncoord"]) != 1 and len(atm.reg_dim_ncoord[0]) != 1):
+                    if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                        extents.extend(
+                            specify_ncoord_extensions(grp, i, basename, atm.reg_dim_ncoord[0], r_ncoord_full)
+                        )
+                    else:
+                        extents.extend(
+                            specify_ncoord_extensions(
+                                grp,
+                                i,
+                                basename,
+                                list(set(atm.props["Ncoord"]) & set(atm.reg_dim_ncoord[0])),
+                                r_ncoord_full,
                             )
                         )
         if not atm.reg_dim_r[0] and "inRing" not in atm.props:
@@ -1048,6 +1134,50 @@ def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full):
 
     return grps
 
+def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full):
+    """
+    generates extensions for specification of the number of electrons on a given atom
+    """
+
+    grps = []
+    label_list = []
+
+    Rset = set(r_ncoord)
+    if isinstance(r_ncoord_full,list):
+        r_spc_ncoord_full = [[y for y in x if y in r_ncoord] for x in r_ncoord_full]
+        if len(r_spc_ncoord_full) == 1:
+            r_spc_ncoord_full = [[x] for x in r_spc_ncoord_full[0]]
+        else:
+            r_spc_ncoord_full += [[x] for x in sum(r_spc_ncoord_full,[]) if [x] not in r_spc_ncoord_full]
+    else:
+        r_spc_ncoord_full = [[x] for x in r_ncoord_full if x in r_ncoord]
+    for item in r_spc_ncoord_full:
+        g = deepcopy(grp)
+        grpc = deepcopy(grp)
+        g.atoms[i].props["Ncoord"] = item
+        grpc.atoms[i].props["Ncoord"] = list(Rset - set(item))
+
+        if len(grpc.atoms[i].props["Ncoord"]) == 0:
+            grpc = None
+
+        atom_type = g.atoms[i].atomtype
+
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
+
+        grps.append(
+            (g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,))
+        )
+
+    return grps
 
 def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds):
     """
