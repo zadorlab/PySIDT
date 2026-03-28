@@ -23,7 +23,7 @@ jobs:
           environment-file: environment.yml
           miniforge-variant: Miniforge3
           miniforge-version: latest
-          python-version: 3.7
+          python-version: 3.9
           activate-environment: pysidt_env
           use-mamba: true
 
