@@ -117,8 +117,12 @@ class SubgraphIsomorphicDecisionTree:
         r_un=None,
         r_site=None,
         r_morph=None,
+        r_ncoord=None,
+        r_label=None,
         uncertainty_prepruning=False,
         max_nodes=np.inf,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
     ):
         if nodes is None:
             nodes = {}
@@ -133,7 +137,10 @@ class SubgraphIsomorphicDecisionTree:
             r_site = []
         if r_morph is None:
             r_morph = []
-
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_label is None:
+            r_label = []
         self.nodes = nodes
         self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
@@ -143,6 +150,9 @@ class SubgraphIsomorphicDecisionTree:
         self.r_un = r_un
         self.r_site = r_site
         self.r_morph = r_morph
+        self.r_ncoord = r_ncoord
+        self.r_label = r_label
+        self.max_ring_gen_size = max_ring_gen_size
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
         self.max_nodes = max_nodes
@@ -150,6 +160,7 @@ class SubgraphIsomorphicDecisionTree:
         self.choose_extension_based_on_subsamples = choose_extension_based_on_subsamples
         self.stuctures_for_extension_generation = None 
         self.node_uncertainties = None
+        self.reverse_extension_generation_allowed = reverse_extension_generation_allowed
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -233,7 +244,7 @@ class SubgraphIsomorphicDecisionTree:
         else:
             return None
 
-    def generate_extensions(self, node, recursing=False):
+    def generate_extensions(self, node, recursing=False, just_reg_dim=False):
         """
         Generates set of extension groups to a node
         returns list of Groups
@@ -260,8 +271,12 @@ class SubgraphIsomorphicDecisionTree:
             r_un=self.r_un,
             r_site=self.r_site,
             r_morph=self.r_morph,
+            r_ncoord=self.r_ncoord,
+            r_label=self.r_label,
             iter_max=self.iter_max,
             iter_item_cap=self.iter_item_cap,
+            just_reg_dim=just_reg_dim,
+            max_ring_gen_size=self.max_ring_gen_size,
         )
 
         if not out and not recursing:
@@ -270,7 +285,7 @@ class SubgraphIsomorphicDecisionTree:
             node.group.clear_reg_dims()
             return self.generate_extensions(node, recursing=True)
 
-        if not out:
+        if not out and self.reverse_extension_generation_allowed:
             logging.info("forward extension generation failed, using reverse extension generation")
             grps = generate_extensions_reverse(node.group,structs)
             name = node.name+"_Revgen"
@@ -537,12 +552,13 @@ class SubgraphIsomorphicDecisionTree:
             self.descend_training_from_top(only_specific_match=False)
 
         simple_regularization(
+            self,
             self.nodes["Root"],
-            self.r,
-            self.r_bonds,
-            self.r_un,
-            self.r_site,
-            self.r_morph,
+            self.r if not self.r or not isinstance(self.r[0],list) else sum(self.r,[]),
+            self.r_bonds if not self.r_bonds or not isinstance(self.r_bonds[0],list) else sum(self.r_bonds,[]),
+            self.r_un if not self.r_un or not isinstance(self.r_un[0],list) else sum(self.r_un,[]),
+            self.r_site if not self.r_site or not isinstance(self.r_site[0],list) else sum(self.r_site,[]),
+            self.r_morph if not self.r_morph or not isinstance(self.r_morph[0],list) else sum(self.r_morph,[]),
         )
     
     def scale_uncertainties(self,validation_set=None):
@@ -762,6 +778,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_morph=None,
         uncertainty_prepruning=False,
         weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
     ):
         if nodes is None:
             nodes = dict()
@@ -789,10 +807,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_site=r_site,
             r_morph=r_morph,
             uncertainty_prepruning=uncertainty_prepruning,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+            max_ring_gen_size=max_ring_gen_size,
         )
 
-        if root_group and (isinstance(decomposition,list) or isinstance(root_group,list)):
-            assert len(decomposition) == len(root_group)
         
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
         self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
@@ -1481,6 +1499,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         r_site=None,
         r_morph=None,
         fract_threshold_to_predict_true=0.5,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
     ):
         if nodes is None:
             nodes = dict()
@@ -1509,6 +1529,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+            max_ring_gen_size=max_ring_gen_size,
             )
 
         self.fract_threshold_to_predict_true = fract_threshold_to_predict_true

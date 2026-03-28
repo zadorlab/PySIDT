@@ -5,7 +5,7 @@ except:
 from pysidt.utils import data_matches_node
 import itertools
 
-def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
+def simple_regularization(tree, node, Rx, Rbonds, Run, Rsite, Rmorph, Rncoord=[], test=True):
     """
     Simplest regularization algorithm
     All nodes are made as specific as their descendant reactions
@@ -26,7 +26,7 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
     child_map = []
     for child in node.children:
         #recursively regularize child
-        simple_regularization(child, Rx, Rbonds, Run, Rsite, Rmorph)
+        simple_regularization(tree, child, Rx, Rbonds, Run, Rsite, Rmorph, Rncoord=Rncoord)
         
         #generate atom map to children
         if node.group is not None:
@@ -34,7 +34,7 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
             atms = []
             initial_map = dict()
             for atom in child.group.atoms:
-                if atom.label and atom.label != '':
+                if atom.label and atom.label != '' and atom.label != "*S":
                     L = [a for a in node.group.atoms if a.label == atom.label]
                     if L == []:
                         return False
@@ -81,6 +81,9 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
     
     if grp is None:
         return
+
+    if node.children == []:
+        tree.generate_extensions(node, recursing=False, just_reg_dim=True) #generate regularization dimensions for leaf nodes
 
     R = Rx[:]
     if ATOMTYPES["X"] in R:
@@ -231,7 +234,40 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
                         atm1.morphology = vals
                         if not data_matches_node(node, data):
                             atm1.morphology = oldvals
+        
+        if Rncoord and "Ncoord" not in atm1.props.keys():
+            atm1.props["Ncoord"] = Rncoord              
+        if (
+            not skip
+            and Rncoord
+            and atm1.reg_dim_ncoord[1] != []
+            and set(atm1.reg_dim_ncoord[1]) != set(atm1.props["Ncoord"])
+        ):
+            if len(atm1.props["Ncoord"]) == 1:
+                pass
+            else:
+                relist = atm1.props["Ncoord"]
+                if relist == []:
+                    relist = Run
+                vals = list(set(relist) & set(atm1.reg_dim_ncoord[1]))
+                assert vals != [], "cannot regularize to empty"
 
+                if all(
+                    [
+                        set(child_map[q][node.group.atoms[i]].props["Ncoord"]) <= set(vals)
+                        if child_map[q][node.group.atoms[i]].props["Ncoord"] != []
+                        else False
+                        for q,child in enumerate(node.children)
+                    ]
+                ):
+                    if not test:
+                        atm1.props["Ncoord"] = vals
+                    else:
+                        oldvals = atm1.props["Ncoord"]
+                        atm1.props["Ncoord"] = vals
+                        if not data_matches_node(node, data):
+                            atm1.props["Ncoord"] = oldvals
+                            
         if (
             not skip
             and atm1.reg_dim_r[1] != []

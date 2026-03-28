@@ -14,6 +14,8 @@ except:
     from rmgpy.molecule.group import GroupAtom, GroupBond
     from rmgpy.molecule.molecule import Molecule
 
+from pysidt.utils import find_shortest_paths
+
 
 def split_mols(data, newgrp):
     """
@@ -25,6 +27,9 @@ def split_mols(data, newgrp):
     and a list of the indices of all of the reactions
     associated with the new group
     """
+    if len(data) == 0:
+        return [],[]
+    
     new = []
     comp = []
 
@@ -61,6 +66,10 @@ def get_extension_edge(
     r_un=None,
     r_site=None,
     r_morph=None,
+    r_ncoord=None,
+    r_label=None,
+    just_reg_dim=False, #determine reg_dims for group only
+    max_ring_gen_size=None,
 ):
     """
     finds the set of all extension groups to parent such that
@@ -85,6 +94,8 @@ def get_extension_edge(
         r_site = []
     if r_morph is None:
         r_morph = []
+    if r_label is None:
+        r_label = None
 
     out_exts = [[]]
     grps = [[group]]
@@ -100,19 +111,22 @@ def get_extension_edge(
         exts = get_extensions(
             grp,
             basename=names[-1],
-            r=r,
-            r_bonds=r_bonds,
-            r_un=r_un,
-            r_site=r_site,
-            r_morph=r_morph,
+            r_full=r,
+            r_bonds_full=r_bonds,
+            r_un_full=r_un,
+            r_site_full=r_site,
+            r_morph_full=r_morph,
+            r_ncoord_full=r_ncoord,
+            r_label=r_label,
             n_strucs_min=n_strucs_min,
+            max_ring_gen_size=max_ring_gen_size,
         )
 
         reg_dict = dict()
         ext_inds = []
         for i, (grp2, grpc, name, typ, indc) in enumerate(exts):
             if (
-                typ != "intNewBondExt"
+                typ != "intNewBridgeExt"
                 and typ != "extNewBondExt"
                 and (typ, indc) not in reg_dict.keys()
             ):
@@ -146,9 +160,13 @@ def get_extension_edge(
                     reg_dict[(typ, indc)][0].extend(
                         grp2.get_bond(grp2.atoms[indc[0]], grp2.atoms[indc[1]]).order
                     )
+                elif typ == "coordExt":
+                    reg_dict[(typ, indc)][0].extend(
+                        grp2.atoms[indc[0]].props["Ncoord"]
+                    )
 
             elif boo:  # this extension matches all reactions (regularization dim)
-                if typ == "intNewBondExt" or typ == "extNewBondExt":
+                if typ == "intNewBridgeExt" or typ == "extNewBondExt":
                     # these are bond formation extensions, we want to expand these until we get splits
                     ext_inds.append(i)
                 elif typ == "atomExt":
@@ -167,6 +185,13 @@ def get_extension_edge(
                     )
                     reg_dict[(typ, indc)][1].extend(
                         grp2.get_bond(grp2.atoms[indc[0]], grp2.atoms[indc[1]]).order
+                    )
+                elif typ == "coordExt":
+                    reg_dict[(typ, indc)][0].extend(
+                        grp2.atoms[indc[0]].props["Ncoord"]
+                    )
+                    reg_dict[(typ, indc)][1].extend(
+                        grp2.atoms[indc[0]].props["Ncoord"]
                     )
                 elif typ == "ringExt":
                     reg_dict[(typ, indc)][1].append(True)
@@ -187,7 +212,7 @@ def get_extension_edge(
             if first_time and not node_children:
                 # parent
                 if (
-                    typr != "intNewBondExt" and typr != "extNewBondExt"
+                    typr != "intNewBridgeExt" and typr != "extNewBondExt"
                 ):  # these dimensions should be regularized
                     if typr == "atomExt":
                         grp.atoms[indcr[0]].reg_dim_atm = list(reg_val)
@@ -197,6 +222,8 @@ def get_extension_edge(
                         grp.atoms[indcr[0]].reg_dim_site = list(reg_val)
                     elif typr == "morphExt":
                         grp.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
+                    elif typr == "coordExt":
+                        grp.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
                     elif typr == "ringExt":
                         grp.atoms[indcr[0]].reg_dim_r = list(reg_val)
                     elif typr == "bondExt":
@@ -206,7 +233,7 @@ def get_extension_edge(
 
             # extensions being sent out
             if (
-                typr != "intNewBondExt" and typr != "extNewBondExt"
+                typr != "intNewBridgeExt" and typr != "extNewBondExt"
             ):  # these dimensions should be regularized
                 for grp2, grpc, name, typ, indc in out_exts[-1]:  # returned groups
                     if typr == "atomExt":
@@ -225,6 +252,10 @@ def get_extension_edge(
                         grp2.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
                         if grpc:
                             grpc.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
+                    elif typr == "coordExt":
+                        grp2.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
+                        if grpc:
+                            grpc.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
                     elif typr == "ringExt":
                         grp2.atoms[indcr[0]].reg_dim_r = list(reg_val)
                         if grpc:
@@ -253,7 +284,7 @@ def get_extension_edge(
         ):  # have to label the regularization dimensions in all relevant groups
             reg_val = reg_dict[(typr, indcr)]
             if (
-                typr != "intNewBondExt" and typr != "extNewBondExt"
+                typr != "intNewBridgeExt" and typr != "extNewBondExt"
             ):  # these dimensions should be regularized
                 for ind2 in ext_inds:  # groups for expansion
                     grp2, grpc, name, typ, indc = exts[ind2]
@@ -273,6 +304,10 @@ def get_extension_edge(
                         grp2.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
                         if grpc:
                             grpc.atoms[indcr[0]].reg_dim_morphology = list(reg_val)
+                    elif typr == "coordExt":
+                        grp2.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
+                        if grpc:
+                            grpc.atoms[indcr[0]].reg_dim_ncoord = list(reg_val)
                     elif typr == "ringExt":
                         grp2.atoms[indcr[0]].reg_dim_r = list(reg_val)
                         if grpc:
@@ -296,6 +331,9 @@ def get_extension_edge(
         grps[iter].pop()
         names.pop()
 
+        if just_reg_dim:
+            return True,None
+        
         for ind in ext_inds:  # collect the groups to be expanded
             grpr, grpcr, namer, typr, indcr = exts[ind]
             if len(grps) == iter + 1:
@@ -339,15 +377,18 @@ def get_extension_edge(
 
 def get_extensions(
     grp,
-    r=None,
-    r_bonds=[1, 2, 3, 1.5, 4],
-    r_un=[0, 1, 2, 3],
-    r_site=[],
-    r_morph=[],
+    r_full=None,
+    r_bonds_full=[1, 2, 3, 1.5, 4],
+    r_un_full=[0, 1, 2, 3],
+    r_site_full=[],
+    r_morph_full=[],
+    r_ncoord_full=[],
+    r_label=[],
     basename="",
     atm_ind=None,
     atm_ind2=None,
     n_strucs_min=None,
+    max_ring_gen_size=None,
 ):
     """
     generate all allowed group extensions and their complements
@@ -360,6 +401,44 @@ def get_extensions(
     if n_strucs_min is None:
         n_strucs_min = len(grp.split())
 
+    if isinstance(r_full[0],list):
+        r = [x for y in r_full for x in y]
+    else:
+        r = r_full[:]
+    
+    if r_bonds_full:
+        if isinstance(r_bonds_full[0],list):
+            r_bonds = [x for y in r_bonds_full for x in y]
+        else:
+            r_bonds = r_bonds_full[:]
+    
+    if r_un_full:
+        if isinstance(r_un_full[0],list):
+            r_un = [x for y in r_un_full for x in y]
+        else:
+            r_un = r_un_full[:]
+    
+    if r_site_full:
+        if isinstance(r_site_full[0],list):
+            r_site = [x for y in r_site_full for x in y]
+        else:
+            r_site = r_site_full[:]
+    
+    if r_morph_full:
+        if isinstance(r_morph_full[0],list):
+            r_morph = [x for y in r_morph_full for x in y]
+        else:
+            r_morph = r_morph_full[:]
+    
+    if r_ncoord_full:
+        if isinstance(r_ncoord_full[0],list):
+            r_ncoord = [x for y in r_ncoord_full for x in y]
+        else:
+            r_ncoord = r_ncoord_full[:]
+    
+    if r_label == []:
+        r_label = ['']
+    
     # generate appropriate r and r!H
     if r is None:
         r = bde_elements  # set of possible r elements/atoms
@@ -396,34 +475,34 @@ def get_extensions(
                 if len(typ) == 1:
                     if typ[0].label == "R":
                         extents.extend(
-                            specify_atom_extensions(grp, i, basename, R)
+                            specify_atom_extensions(grp, i, basename, R, r_full)
                         )  # specify types of atoms
                     elif typ[0].label == "R!H":
-                        extents.extend(specify_atom_extensions(grp, i, basename, RnH))
+                        extents.extend(specify_atom_extensions(grp, i, basename, RnH, r_full))
                     elif typ[0].label == "Rx":
-                        extents.extend(specify_atom_extensions(grp, i, basename, r))
+                        extents.extend(specify_atom_extensions(grp, i, basename, r, r_full))
                     elif typ[0].label == "Rx!H":
-                        extents.extend(specify_atom_extensions(grp, i, basename, RxnH))
+                        extents.extend(specify_atom_extensions(grp, i, basename, RxnH, r_full))
                 else:
-                    extents.extend(specify_atom_extensions(grp, i, basename, typ))
+                    extents.extend(specify_atom_extensions(grp, i, basename, typ, r_full))
             else:
                 if len(typ) == 1:
                     if typ[0].label == "R":
                         extents.extend(
                             specify_atom_extensions(
-                                grp, i, basename, atm.reg_dim_atm[0]
+                                grp, i, basename, atm.reg_dim_atm[0], r_full
                             )
                         )  # specify types of atoms
                     elif typ[0].label == "R!H":
                         extents.extend(
                             specify_atom_extensions(
-                                grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RnH))
+                                grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RnH)), r_full
                             )
                         )
                     elif typ[0].label == "Rx":
                         extents.extend(
                             specify_atom_extensions(
-                                grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(r))
+                                grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(r)), r_full
                             )
                         )
                     elif typ[0].label == "Rx!H":
@@ -432,26 +511,26 @@ def get_extensions(
                                 grp,
                                 i,
                                 basename,
-                                list(set(atm.reg_dim_atm[0]) & set(RxnH)),
+                                list(set(atm.reg_dim_atm[0]) & set(RxnH)), r_full
                             )
                         )
 
                 else:
                     extents.extend(
                         specify_atom_extensions(
-                            grp, i, basename, list(set(typ) & set(atm.reg_dim_atm[0]))
+                            grp, i, basename, list(set(typ) & set(atm.reg_dim_atm[0])), r_full
                         )
                     )
             if not atm.reg_dim_u[0]:
                 if len(atm.radical_electrons) != 1:
                     if len(atm.radical_electrons) == 0:
                         extents.extend(
-                            specify_unpaired_extensions(grp, i, basename, r_un)
+                            specify_unpaired_extensions(grp, i, basename, r_un, r_un_full)
                         )
                     else:
                         extents.extend(
                             specify_unpaired_extensions(
-                                grp, i, basename, atm.radical_electrons
+                                grp, i, basename, atm.radical_electrons, r_un_full
                             )
                         )
             else:
@@ -459,7 +538,7 @@ def get_extensions(
                     if len(atm.radical_electrons) == 0:
                         extents.extend(
                             specify_unpaired_extensions(
-                                grp, i, basename, atm.reg_dim_u[0]
+                                grp, i, basename, atm.reg_dim_u[0], r_un_full
                             )
                         )
                     else:
@@ -471,25 +550,26 @@ def get_extensions(
                                 list(
                                     set(atm.radical_electrons) & set(atm.reg_dim_u[0])
                                 ),
+                                r_un_full,
                             )
                         )
-            if r_site:
+            if r_site_full:
                 if not atm.reg_dim_site[0]:
                     if len(atm.site) != 1:
                         if len(atm.site) == 0:
                             extents.extend(
-                                specify_site_extensions(grp, i, basename, r_site)
+                                specify_site_extensions(grp, i, basename, r_site, r_site_full)
                             )
                         else:
                             extents.extend(
-                                specify_site_extensions(grp, i, basename, atm.site)
+                                specify_site_extensions(grp, i, basename, atm.site, r_site_full)
                             )
                 else:
                     if len(atm.site) != 1 and len(atm.reg_dim_site[0]) != 1:
                         if len(atm.site) == 0:
                             extents.extend(
                                 specify_site_extensions(
-                                    grp, i, basename, atm.reg_dim_site[0]
+                                    grp, i, basename, atm.reg_dim_site[0], r_site_full
                                 )
                             )
                         else:
@@ -498,20 +578,20 @@ def get_extensions(
                                     grp,
                                     i,
                                     basename,
-                                    list(set(atm.site) & set(atm.reg_dim_site[0])),
+                                    list(set(atm.site) & set(atm.reg_dim_site[0])), r_site_full
                                 )
                             )
-            if r_morph:
+            if r_morph_full:
                 if not atm.reg_dim_morphology[0]:
                     if len(atm.morphology) != 1:
                         if len(atm.morphology) == 0:
                             extents.extend(
-                                specify_morphology_extensions(grp, i, basename, r_morph)
+                                specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full)
                             )
                         else:
                             extents.extend(
                                 specify_morphology_extensions(
-                                    grp, i, basename, atm.morphology
+                                    grp, i, basename, atm.morphology, r_morph_full
                                 )
                             )
                 else:
@@ -519,7 +599,7 @@ def get_extensions(
                         if len(atm.morphology) == 0:
                             extents.extend(
                                 specify_morphology_extensions(
-                                    grp, i, basename, atm.reg_dim_morphology[0]
+                                    grp, i, basename, atm.reg_dim_morphology[0], r_morph_full
                                 )
                             )
                         else:
@@ -532,26 +612,60 @@ def get_extensions(
                                         set(atm.morphology)
                                         & set(atm.reg_dim_morphology[0])
                                     ),
+                                    r_morph_full,
+                                )
+                            )
+            if r_ncoord_full:
+                if not atm.reg_dim_ncoord[0]:
+                    if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) != 1:
+                        if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                            extents.extend(
+                                specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full)
+                            )
+                        else:
+                            extents.extend(
+                                specify_ncoord_extensions(
+                                    grp, i, basename, atm.props["Ncoord"], r_ncoord_full
+                                )
+                            )
+                else:
+                    if "Ncoord" not in atm.props.keys() or (len(atm.props["Ncoord"]) != 1 and len(atm.reg_dim_ncoord[0]) != 1):
+                        if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                            extents.extend(
+                                specify_ncoord_extensions(
+                                    grp, i, basename, atm.reg_dim_ncoord[0], r_ncoord_full
+                                )
+                            )
+                        else:
+                            extents.extend(
+                                specify_ncoord_extensions(
+                                    grp,
+                                    i,
+                                    basename,
+                                    list(
+                                        set(atm.props["Ncoord"]) & set(atm.reg_dim_ncoord[0])
+                                    ),
+                                    r_ncoord_full,
                                 )
                             )
             if not atm.reg_dim_r[0] and "inRing" not in atm.props:
                 extents.extend(specify_ring_extensions(grp, i, basename))
 
             extents.extend(
-                specify_external_new_bond_extensions(grp, i, basename, r_bonds)
+                specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label)
             )
             for j, atm2 in enumerate(atoms):
-                if j < i and not grp.has_bond(atm, atm2):
+                if j <= i and not grp.has_bond(atm, atm2):
                     extents.extend(
                         specify_internal_new_bond_extensions(
-                            grp, i, j, n_strucs_min, basename, r_bonds
+                            grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size,
                         )
                     )
                 elif j < i:
                     bd = grp.get_bond(atm, atm2)
                     if len(bd.order) > 1 and not bd.reg_dim[0]:
                         extents.extend(
-                            specify_bond_extensions(grp, i, j, basename, bd.order)
+                            specify_bond_extensions(grp, i, j, basename, bd.order, r_bonds_full)
                         )
                     elif (
                         len(bd.order) > 1
@@ -559,7 +673,7 @@ def get_extensions(
                         and len(bd.reg_dim[0]) > len(bd.reg_dim[1])
                     ):
                         extents.extend(
-                            specify_bond_extensions(grp, i, j, basename, bd.reg_dim[0])
+                            specify_bond_extensions(grp, i, j, basename, bd.reg_dim[0], r_bonds_full)
                         )
 
     elif (
@@ -569,23 +683,23 @@ def get_extensions(
         j = atm_ind2
         atm = atoms[i]
         atm2 = atoms[j]
-        if j < i and not grp.has_bond(atm, atm2):
+        if j <= i and not grp.has_bond(atm, atm2):
             extents.extend(
                 specify_internal_new_bond_extensions(
-                    grp, i, j, n_strucs_min, basename, r_bonds
+                    grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size,
                 )
             )
         if grp.has_bond(atm, atm2):
             bd = grp.get_bond(atm, atm2)
             if len(bd.order) > 1 and not bd.reg_dim[0]:
-                extents.extend(specify_bond_extensions(grp, i, j, basename, bd.order))
+                extents.extend(specify_bond_extensions(grp, i, j, basename, bd.order, r_bonds_full))
             elif (
                 len(bd.order) > 1
                 and len(bd.reg_dim[0]) > 1
                 and len(bd.reg_dim[0]) > len(bd.reg_dim[1])
             ):
                 extents.extend(
-                    specify_bond_extensions(grp, i, j, basename, bd.reg_dim[0])
+                    specify_bond_extensions(grp, i, j, basename, bd.reg_dim[0], r_bonds_full)
                 )
 
     elif atm_ind is not None:  # look at the atom at atm_ind
@@ -599,58 +713,58 @@ def get_extensions(
                         specify_atom_extensions(grp, i, basename, R)
                     )  # specify types of atoms
                 elif typ[0].label == "R!H":
-                    extents.extend(specify_atom_extensions(grp, i, basename, RnH))
+                    extents.extend(specify_atom_extensions(grp, i, basename, RnH, r_full))
                 elif typ[0].label == "Rx":
-                    extents.extend(specify_atom_extensions(grp, i, basename, r))
+                    extents.extend(specify_atom_extensions(grp, i, basename, r, r_full))
                 elif typ[0].label == "Rx!H":
-                    extents.extend(specify_atom_extensions(grp, i, basename, RxnH))
+                    extents.extend(specify_atom_extensions(grp, i, basename, RxnH, r_full))
             else:
-                extents.extend(specify_atom_extensions(grp, i, basename, typ))
+                extents.extend(specify_atom_extensions(grp, i, basename, typ, r_full))
         else:
             if len(typ) == 1:
                 if typ[0].label == "R":
                     extents.extend(
-                        specify_atom_extensions(grp, i, basename, atm.reg_dim_atm[0])
+                        specify_atom_extensions(grp, i, basename, atm.reg_dim_atm[0], r_full)
                     )  # specify types of atoms
                 elif typ[0].label == "R!H":
                     extents.extend(
                         specify_atom_extensions(
-                            grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RnH))
+                            grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RnH)), r_full
                         )
                     )
                 elif typ[0].label == "Rx":
                     extents.extend(
                         specify_atom_extensions(
-                            grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(r))
+                            grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(r)), r_full
                         )
                     )
                 elif typ[0].label == "Rx!H":
                     extents.extend(
                         specify_atom_extensions(
-                            grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RxnH))
+                            grp, i, basename, list(set(atm.reg_dim_atm[0]) & set(RxnH)), r_full
                         )
                     )
             else:
                 extents.extend(
                     specify_atom_extensions(
-                        grp, i, basename, list(set(typ) & set(atm.reg_dim_atm[0]))
+                        grp, i, basename, list(set(typ) & set(atm.reg_dim_atm[0])), r_full
                     )
                 )
         if not atm.reg_dim_u:
             if len(atm.radical_electrons) != 1:
                 if len(atm.radical_electrons) == 0:
-                    extents.extend(specify_unpaired_extensions(grp, i, basename, r_un))
+                    extents.extend(specify_unpaired_extensions(grp, i, basename, r_un, r_un_full))
                 else:
                     extents.extend(
                         specify_unpaired_extensions(
-                            grp, i, basename, atm.radical_electrons
+                            grp, i, basename, atm.radical_electrons, r_un_full
                         )
                     )
         else:
             if len(atm.radical_electrons) != 1 and len(atm.reg_dim_u[0]) != 1:
                 if len(atm.radical_electrons) == 0:
                     extents.extend(
-                        specify_unpaired_extensions(grp, i, basename, atm.reg_dim_u[0])
+                        specify_unpaired_extensions(grp, i, basename, atm.reg_dim_u[0], r_un_full)
                     )
                 else:
                     extents.extend(
@@ -659,25 +773,26 @@ def get_extensions(
                             i,
                             basename,
                             list(set(atm.radical_electrons) & set(atm.reg_dim_u[0])),
+                            r_un_full,
                         )
                     )
-        if r_site:
+        if r_site_full:
             if not atm.reg_dim_site:
                 if len(atm.site) != 1:
                     if len(atm.site) == 0:
                         extents.extend(
-                            specify_site_extensions(grp, i, basename, r_site)
+                            specify_site_extensions(grp, i, basename, r_site, r_site_full)
                         )
                     else:
                         extents.extend(
-                            specify_site_extensions(grp, i, basename, atm.site)
+                            specify_site_extensions(grp, i, basename, atm.site, r_site_full)
                         )
             else:
                 if len(atm.site) != 1 and len(atm.reg_dim_site[0]) != 1:
                     if len(atm.site) == 0:
                         extents.extend(
                             specify_site_extensions(
-                                grp, i, basename, atm.reg_dim_site[0]
+                                grp, i, basename, atm.reg_dim_site[0], r_site_full
                             )
                         )
                     else:
@@ -687,19 +802,20 @@ def get_extensions(
                                 i,
                                 basename,
                                 list(set(atm.site) & set(atm.reg_dim_site[0])),
+                                r_site_full,
                             )
                         )
-        if r_morph:
+        if r_morph_full:
             if not atm.reg_dim_morphology:
                 if len(atm.morphology) != 1:
                     if len(atm.morphology) == 0:
                         extents.extend(
-                            specify_morphology_extensions(grp, i, basename, r_morph)
+                            specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full)
                         )
                     else:
                         extents.extend(
                             specify_morphology_extensions(
-                                grp, i, basename, atm.morphology
+                                grp, i, basename, atm.morphology, r_morph_full
                             )
                         )
             else:
@@ -707,7 +823,7 @@ def get_extensions(
                     if len(atm.morphology) == 0:
                         extents.extend(
                             specify_morphology_extensions(
-                                grp, i, basename, atm.reg_dim_morphology[0]
+                                grp, i, basename, atm.reg_dim_morphology[0], r_morph_full
                             )
                         )
                     else:
@@ -719,24 +835,52 @@ def get_extensions(
                                 list(
                                     set(atm.morphology) & set(atm.reg_dim_morphology[0])
                                 ),
+                                r_morph_full,
+                            )
+                        )
+        if r_ncoord_full:
+            if not atm.reg_dim_ncoord:
+                if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) != 1:
+                    if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                        extents.extend(specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full))
+                    else:
+                        extents.extend(
+                            specify_ncoord_extensions(
+                                grp, i, basename, atm.props["Ncoord"], r_ncoord_full
+                            )
+                        )
+            else:
+                if "Ncoord" not in atm.props.keys() or (len(atm.props["Ncoord"]) != 1 and len(atm.reg_dim_ncoord[0]) != 1):
+                    if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                        extents.extend(
+                            specify_ncoord_extensions(grp, i, basename, atm.reg_dim_ncoord[0], r_ncoord_full)
+                        )
+                    else:
+                        extents.extend(
+                            specify_ncoord_extensions(
+                                grp,
+                                i,
+                                basename,
+                                list(set(atm.props["Ncoord"]) & set(atm.reg_dim_ncoord[0])),
+                                r_ncoord_full,
                             )
                         )
         if not atm.reg_dim_r[0] and "inRing" not in atm.props:
             extents.extend(specify_ring_extensions(grp, i, basename))
 
-        extents.extend(specify_external_new_bond_extensions(grp, i, basename, r_bonds))
+        extents.extend(specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label))
         for j, atm2 in enumerate(atoms):
-            if j < i and not grp.has_bond(atm, atm2):
+            if j <= i and not grp.has_bond(atm, atm2):
                 extents.extend(
                     specify_internal_new_bond_extensions(
-                        grp, i, j, n_strucs_min, basename, r_bonds
+                        grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size,
                     )
                 )
             elif j < i:
                 bd = grp.get_bond(atm, atm2)
                 if len(bd.order) > 1 and not bd.reg_dim:
                     extents.extend(
-                        specify_bond_extensions(grp, i, j, basename, bd.order)
+                        specify_bond_extensions(grp, i, j, basename, bd.order, r_bonds_full)
                     )
                 elif (
                     len(bd.order) > 1
@@ -744,7 +888,7 @@ def get_extensions(
                     and len(bd.reg_dim[0]) > len(bd.reg_dim[1])
                 ):
                     extents.extend(
-                        specify_bond_extensions(grp, i, j, basename, bd.reg_dim[0])
+                        specify_bond_extensions(grp, i, j, basename, bd.reg_dim[0], r_bonds_full)
                     )
 
     else:
@@ -758,7 +902,7 @@ def get_extensions(
     return extents
 
 
-def specify_atom_extensions(grp, i, basename, r):
+def specify_atom_extensions(grp, i, basename, r, r_full):
     """
     generates extensions for specification of the type of atom defined by a given atomtype
     or set of atomtypes
@@ -767,12 +911,20 @@ def specify_atom_extensions(grp, i, basename, r):
 
     grps = []
     Rset = set(r)
-    for item in r:
-        grp = deepcopy(grp)
+    if isinstance(r_full[0],list):
+        r_spc_full = [[y for y in x if y in r] for x in r_full]
+        if len(r_spc_full) == 1:
+            r_spc_full = [[x] for x in r_spc_full[0]]
+        else:
+            r_spc_full += [[x] for x in sum(r_spc_full,[]) if [x] not in r_spc_full]
+    else:
+        r_spc_full = [[x] for x in r_full if x in r]
+    for item in r_spc_full:
+        g = deepcopy(grp)
         grpc = deepcopy(grp)
-        old_atom_type = grp.atoms[i].atomtype
-        grp.atoms[i].atomtype = [item]
-        grpc.atoms[i].atomtype = list(Rset - {item})
+        old_atom_type = g.atoms[i].atomtype
+        g.atoms[i].atomtype = item
+        grpc.atoms[i].atomtype = list(Rset - set(item))
 
         if len(grpc.atoms[i].atomtype) == 0:
             grpc = None
@@ -791,9 +943,9 @@ def specify_atom_extensions(grp, i, basename, r):
 
         grps.append(
             (
-                grp,
+                g,
                 grpc,
-                basename + "_" + str(i + 1) + old_atom_type_str + "->" + item.label,
+                basename + "_" + str(i + 1) + old_atom_type_str + "->" + "".join([x.label for x in item]),
                 "atomExt",
                 (i,),
             )
@@ -812,12 +964,12 @@ def specify_ring_extensions(grp, i, basename):
     grps = []
     label_list = []
 
-    grp = deepcopy(grp)
+    g = deepcopy(grp)
     grpc = deepcopy(grp)
-    grp.atoms[i].props["inRing"] = True
+    g.atoms[i].props["inRing"] = True
     grpc.atoms[i].props["inRing"] = False
 
-    atom_type = grp.atoms[i].atomtype
+    atom_type = g.atoms[i].atomtype
 
     if len(atom_type) > 1:
         atom_type_str = ""
@@ -832,7 +984,7 @@ def specify_ring_extensions(grp, i, basename):
 
     grps.append(
         (
-            grp,
+            g,
             grpc,
             basename + "_" + str(i + 1) + atom_type_str + "-inRing",
             "ringExt",
@@ -843,7 +995,7 @@ def specify_ring_extensions(grp, i, basename):
     return grps
 
 
-def specify_unpaired_extensions(grp, i, basename, r_un):
+def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
@@ -852,16 +1004,24 @@ def specify_unpaired_extensions(grp, i, basename, r_un):
     label_list = []
 
     Rset = set(r_un)
-    for item in r_un:
-        grp = deepcopy(grp)
+    if isinstance(r_un_full[0],list):
+        r_spc_un_full = [[y for y in x if y in r_un] for x in r_un_full]
+        if len(r_spc_un_full) == 1:
+            r_spc_un_full = [[x] for x in r_spc_un_full[0]]
+        else:
+            r_spc_un_full += [[x] for x in sum(r_spc_un_full,[]) if [x] not in r_spc_un_full]
+    else:
+        r_spc_un_full = [[x] for x in r_un_full if x in r_un]
+    for item in r_spc_un_full:
+        g = deepcopy(grp)
         grpc = deepcopy(grp)
-        grp.atoms[i].radical_electrons = [item]
-        grpc.atoms[i].radical_electrons = list(Rset - {item})
+        g.atoms[i].radical_electrons = item
+        grpc.atoms[i].radical_electrons = list(Rset - set(item))
 
         if len(grpc.atoms[i].radical_electrons) == 0:
             grpc = None
 
-        atom_type = grp.atoms[i].atomtype
+        atom_type = g.atoms[i].atomtype
 
         if len(atom_type) > 1:
             atom_type_str = ""
@@ -875,37 +1035,45 @@ def specify_unpaired_extensions(grp, i, basename, r_un):
             atom_type_str = atom_type[0].label
 
         grps.append(
-            (grp, grpc, basename + "_" + str(i + 1) + "-u" + str(item), "elExt", (i,))
+            (g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,))
         )
 
     return grps
 
 
-def specify_site_extensions(grp, i, basename, r_site):
+def specify_site_extensions(grp, i, basename, r_site, r_site_full):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
-    x = ATOMTYPES["X"]
-    if (
-        not any([s.is_specific_case_of(x) for s in grp.atoms[i].atomtype])
-        and grp.atoms[i].atomtype[0] != ATOMTYPES["Rx"]
-    ):
-        return []
+    # x = ATOMTYPES["X"]
+    # if (
+    #     not any([s.is_specific_case_of(x) for s in grp.atoms[i].atomtype])
+    #     and grp.atoms[i].atomtype[0] != ATOMTYPES["Rx"]
+    # ):
+    #     return []
 
     grps = []
     label_list = []
 
     Rset = set(r_site)
-    for item in r_site:
-        grp = deepcopy(grp)
+    if isinstance(r_site_full[0],list):
+        r_spc_site_full = [[y for y in x if y in r_site] for x in r_site_full]
+        if len(r_spc_site_full) == 1:
+            r_spc_site_full = [[x] for x in r_spc_site_full[0]]
+        else:
+            r_spc_site_full += [[x] for x in sum(r_spc_site_full,[]) if [x] not in r_spc_site_full]
+    else:
+        r_spc_site_full = [[x] for x in r_site_full if x in r_site]
+    for item in r_spc_site_full:
+        g = deepcopy(grp)
         grpc = deepcopy(grp)
-        grp.atoms[i].site = [item]
-        grpc.atoms[i].site = list(Rset - {item})
+        g.atoms[i].site = item
+        grpc.atoms[i].site = list(Rset - set(item))
 
         if len(grpc.atoms[i].site) == 0:
             grpc = None
 
-        atom_type = grp.atoms[i].atomtype
+        atom_type = g.atoms[i].atomtype
 
         if len(atom_type) > 1:
             atom_type_str = ""
@@ -919,37 +1087,45 @@ def specify_site_extensions(grp, i, basename, r_site):
             atom_type_str = atom_type[0].label
 
         grps.append(
-            (grp, grpc, basename + "_" + str(i + 1) + "-s" + str(item), "siteExt", (i,))
+            (g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,))
         )
 
     return grps
 
 
-def specify_morphology_extensions(grp, i, basename, r_morph):
+def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
-    x = ATOMTYPES["X"]
-    if (
-        not any([s.is_specific_case_of(x) for s in grp.atoms[i].atomtype])
-        and grp.atoms[i].atomtype[0] != ATOMTYPES["Rx"]
-    ):
-        return []
+    # x = ATOMTYPES["X"]
+    # if (
+    #     not any([s.is_specific_case_of(x) for s in grp.atoms[i].atomtype])
+    #     and grp.atoms[i].atomtype[0] != ATOMTYPES["Rx"]
+    # ):
+    #     return []
 
     grps = []
     label_list = []
 
     Rset = set(r_morph)
-    for item in r_morph:
-        grp = deepcopy(grp)
+    if isinstance(r_morph_full[0],list):
+        r_spc_morph_full = [[y for y in x if y in r_morph] for x in r_morph_full]
+        if len(r_spc_morph_full) == 1:
+            r_spc_morph_full = [[x] for x in r_spc_morph_full[0]]
+        else:
+            r_spc_morph_full += [[x] for x in sum(r_spc_morph_full,[]) if [x] not in r_spc_morph_full]
+    else:
+        r_spc_morph_full = [[x] for x in r_morph_full if x in r_morph]
+    for item in r_spc_morph_full:
+        g = deepcopy(grp)
         grpc = deepcopy(grp)
-        grp.atoms[i].morphology = [item]
-        grpc.atoms[i].morphology = list(Rset - {item})
+        g.atoms[i].morphology = item
+        grpc.atoms[i].morphology = list(Rset - set(item))
 
         if len(grpc.atoms[i].morphology) == 0:
             grpc = None
 
-        atom_type = grp.atoms[i].atomtype
+        atom_type = g.atoms[i].atomtype
 
         if len(atom_type) > 1:
             atom_type_str = ""
@@ -964,9 +1140,9 @@ def specify_morphology_extensions(grp, i, basename, r_morph):
 
         grps.append(
             (
-                grp,
+                g,
                 grpc,
-                basename + "_" + str(i + 1) + "-m" + str(item),
+                basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]),
                 "morphExt",
                 (i,),
             )
@@ -974,21 +1150,75 @@ def specify_morphology_extensions(grp, i, basename, r_morph):
 
     return grps
 
+def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full):
+    """
+    generates extensions for specification of the number of electrons on a given atom
+    """
 
-def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds):
+    grps = []
+    label_list = []
+
+    Rset = set(r_ncoord)
+    if isinstance(r_ncoord_full,list):
+        r_spc_ncoord_full = [[y for y in x if y in r_ncoord] for x in r_ncoord_full]
+        if len(r_spc_ncoord_full) == 1:
+            r_spc_ncoord_full = [[x] for x in r_spc_ncoord_full[0]]
+        else:
+            r_spc_ncoord_full += [[x] for x in sum(r_spc_ncoord_full,[]) if [x] not in r_spc_ncoord_full]
+    else:
+        r_spc_ncoord_full = [[x] for x in r_ncoord_full if x in r_ncoord]
+    for item in r_spc_ncoord_full:
+        g = deepcopy(grp)
+        grpc = deepcopy(grp)
+        g.atoms[i].props["Ncoord"] = item
+        grpc.atoms[i].props["Ncoord"] = list(Rset - set(item))
+
+        if len(grpc.atoms[i].props["Ncoord"]) == 0:
+            grpc = None
+
+        atom_type = g.atoms[i].atomtype
+
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
+
+        grps.append(
+            (g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,))
+        )
+
+    return grps
+
+def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=None):
     """
     generates extensions for creation of a bond (of undefined order)
     between two atoms indexed i,j that already exist in the group and are unbonded
     """
     # cython.declare(newgrp=Group)
-
+    if i == j:
+        if max_ring_gen_size is None:
+            return []
+        pathlen = 1
+    else:
+        paths = find_shortest_paths(grp.atoms[i],grp.atoms[j])
+        if paths is None:
+            pathlen = None
+        else:
+            pathlen = len(paths[0])
+    
+    if pathlen is None and n_strucs_min == len(grp.split()): #internal bridge will reduce below minimum number of independent structures
+        return []
+    
     label_list = []
-
-    newgrp = deepcopy(grp)
-    newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
-
-    atom_type_i = newgrp.atoms[i].atomtype
-    atom_type_j = newgrp.atoms[j].atomtype
+        
+    atom_type_i = grp.atoms[i].atomtype
+    atom_type_j = grp.atoms[j].atomtype
 
     if len(atom_type_i) > 1:
         atom_type_i_str = ""
@@ -1010,67 +1240,101 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
         atom_type_j_str = ""
     else:
         atom_type_j_str = atom_type_j[0].label
+        
+    if max_ring_gen_size is None: #just internal bond extensions
+        newgrp = deepcopy(grp)
+        newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
 
-    if (
-        len(newgrp.split()) < n_strucs_min
-    ):  # if this formed a bond between two seperate groups in the
-        return []
-    else:
         return [
-            (
-                newgrp,
-                None,
-                basename
-                + "_Int-"
-                + str(i + 1)
-                + atom_type_i_str
-                + "-"
-                + str(j + 1)
-                + atom_type_j_str,
-                "intNewBondExt",
-                (i, j),
-            )
-        ]
+                (
+                    newgrp,
+                    None,
+                    basename
+                    + "_Int-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + "-"
+                    + str(j + 1)
+                    + atom_type_j_str
+                    + "-Br0",
+                    "intNewBridgeExt",
+                    (i, j),
+                )
+            ]
+    else:
+        grps = []
+        for bridgelen in range(max_ring_gen_size-pathlen+1): #includes bridgelen == 0
+            if i == j and bridgelen < 2: #this is no change from the original group or external bond creation
+                continue
+            newgrp = deepcopy(grp)
+            tail_atom = newgrp.atoms[i]
+            head_atom = newgrp.atoms[j]
+            for k in range(bridgelen): #create first ring
+                newatm = GroupAtom([ATOMTYPES['R!H']])
+                newgrp.add_atom(newatm)
+                bd = GroupBond(tail_atom,newatm,order=r_bonds)
+                newgrp.add_bond(bd)
+                tail_atom = newatm
+            else:
+                bd = GroupBond(tail_atom,head_atom,order=r_bonds)
+                newgrp.add_bond(bd)
+            
+            grps.append((
+                    newgrp,
+                    None,
+                    basename
+                    + "_Int-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + "-"
+                    + str(j + 1)
+                    + atom_type_j_str
+                    + "-Br"+str(bridgelen),
+                    "intNewBridgeExt",
+                    (i, j),
+                ))
+    
+    return grps    
 
-
-def specify_external_new_bond_extensions(grp, i, basename, r_bonds):
+def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
     """
     generates extensions for the creation of a bond (of undefined order) between
     an atom and a new atom that is not H
     """
     # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
-
     label_list = []
+    grps = []
+    for alabel in r_label:
+        ga = GroupAtom([ATOMTYPES["Rx!H"]])
+        ga.label = alabel
+        newgrp = deepcopy(grp)
+        newgrp.add_atom(ga)
+        j = newgrp.atoms.index(ga)
+        newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
+        atom_type = newgrp.atoms[i].atomtype
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
 
-    ga = GroupAtom([ATOMTYPES["Rx!H"]])
-    newgrp = deepcopy(grp)
-    newgrp.add_atom(ga)
-    j = newgrp.atoms.index(ga)
-    newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
-    atom_type = newgrp.atoms[i].atomtype
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    return [
-        (
-            newgrp,
-            None,
-            basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
-            "extNewBondExt",
-            (len(newgrp.atoms) - 1,),
+        grps.append(
+            (
+                newgrp,
+                None,
+                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                "extNewBondExt",
+                (len(newgrp.atoms) - 1,),
+            )
         )
-    ]
+    return grps
 
-
-def specify_bond_extensions(grp, i, j, basename, r_bonds):
+def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full):
     """
     generates extensions for the specification of bond order for a given bond
     """
@@ -1080,19 +1344,27 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds):
     Rbset = set(r_bonds)
     bdict = {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}
     bstrdict = {"S": 1, "D": 2, "T": 3, "B": 1.5, "Q": 4, "R": 0.05, "vdW": 0}
-    for bd in r_bonds:
-        grp = deepcopy(grp)
+    if isinstance(r_bonds_full[0],list):
+        r_spc_bonds_full = [[y for y in x if y in r_bonds] for x in r_bonds_full]
+        if len(r_spc_bonds_full) == 1:
+            r_spc_bonds_full = [[x] for x in r_spc_bonds_full[0]]
+        else:
+            r_spc_bonds_full += [[x] for x in sum(r_spc_bonds_full,[]) if [x] not in r_spc_bonds_full]
+    else:
+        r_spc_bonds_full = [[x] for x in r_bonds_full if x in r_bonds]
+    for bd in r_spc_bonds_full:
+        g = deepcopy(grp)
         grpc = deepcopy(grp)
-        grp.atoms[i].bonds[grp.atoms[j]].order = [bd]
-        grp.atoms[j].bonds[grp.atoms[i]].order = [bd]
-        grpc.atoms[i].bonds[grpc.atoms[j]].order = list(Rbset - {bd})
-        grpc.atoms[j].bonds[grpc.atoms[i]].order = list(Rbset - {bd})
+        g.atoms[i].bonds[g.atoms[j]].order = bd
+        g.atoms[j].bonds[g.atoms[i]].order = bd
+        grpc.atoms[i].bonds[grpc.atoms[j]].order = list(Rbset - set(bd))
+        grpc.atoms[j].bonds[grpc.atoms[i]].order = list(Rbset - set(bd))
 
-        if len(list(Rbset - {bd})) == 0:
+        if len(list(Rbset - set(bd))) == 0:
             grpc = None
 
-        atom_type_i = grp.atoms[i].atomtype
-        atom_type_j = grp.atoms[j].atomtype
+        atom_type_i = g.atoms[i].atomtype
+        atom_type_j = g.atoms[j].atomtype
 
         if len(atom_type_i) > 1:
             atom_type_i_str = ""
@@ -1115,13 +1387,13 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds):
         else:
             atom_type_j_str = atom_type_j[0].label
 
-        b = None
+        b = ""
         for v in bdict.keys():
-            if abs(v - bd) < 1e-4:
-                b = bdict[v]
+            if any(abs(v - x) < 1e-4 for x in bd):
+                b += bdict[v]
         grps.append(
             (
-                grp,
+                g,
                 grpc,
                 basename
                 + "_Sp-"
