@@ -61,6 +61,7 @@ def get_extension_edge(
     r_un=None,
     r_site=None,
     r_morph=None,
+    just_reg_dim=False, #determine reg_dims for group only
 ):
     """
     finds the set of all extension groups to parent such that
@@ -296,6 +297,9 @@ def get_extension_edge(
         grps[iter].pop()
         names.pop()
 
+        if just_reg_dim:
+            return True,None
+        
         for ind in ext_inds:  # collect the groups to be expanded
             grpr, grpcr, namer, typr, indcr = exts[ind]
             if len(grps) == iter + 1:

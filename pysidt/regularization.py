@@ -5,7 +5,7 @@ except:
 from pysidt.utils import data_matches_node
 import itertools
 
-def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
+def simple_regularization(tree, node, Rx, Rbonds, Run, Rsite, Rmorph, Rncoord=[], test=True):
     """
     Simplest regularization algorithm
     All nodes are made as specific as their descendant reactions
@@ -26,7 +26,7 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
     child_map = []
     for child in node.children:
         #recursively regularize child
-        simple_regularization(child, Rx, Rbonds, Run, Rsite, Rmorph)
+        simple_regularization(tree, child, Rx, Rbonds, Run, Rsite, Rmorph, Rncoord=Rncoord)
         
         #generate atom map to children
         if node.group is not None:
@@ -81,6 +81,9 @@ def simple_regularization(node, Rx, Rbonds, Run, Rsite, Rmorph, test=True):
     
     if grp is None:
         return
+
+    if node.children == []:
+        tree.generate_extensions(node, recursing=False, just_reg_dim=True) #generate regularization dimensions for leaf nodes
 
     R = Rx[:]
     if ATOMTYPES["X"] in R:

@@ -235,7 +235,7 @@ class SubgraphIsomorphicDecisionTree:
         else:
             return None
 
-    def generate_extensions(self, node, recursing=False):
+    def generate_extensions(self, node, recursing=False, just_reg_dim=False):
         """
         Generates set of extension groups to a node
         returns list of Groups
@@ -264,6 +264,7 @@ class SubgraphIsomorphicDecisionTree:
             r_morph=self.r_morph,
             iter_max=self.iter_max,
             iter_item_cap=self.iter_item_cap,
+            just_reg_dim=just_reg_dim
         )
 
         if not out and not recursing:
@@ -539,6 +540,7 @@ class SubgraphIsomorphicDecisionTree:
             self.descend_training_from_top(only_specific_match=False)
 
         simple_regularization(
+            self,
             self.nodes["Root"],
             self.r,
             self.r_bonds,
