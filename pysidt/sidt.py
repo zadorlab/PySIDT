@@ -1,8 +1,15 @@
-from molecule.molecule import Group
-from molecule.quantity import ScalarQuantity
-from molecule.kinetics.uncertainties import RateUncertainty
-from molecule.molecule.atomtype import ATOMTYPES
-from molecule.molecule.element import bde_elements
+try:
+    from molecule.molecule import Group
+    from molecule.quantity import ScalarQuantity
+    from molecule.kinetics.uncertainties import RateUncertainty
+    from molecule.molecule.atomtype import ATOMTYPES
+    from molecule.molecule.element import bde_elements
+except:
+    from rmgpy.molecule import Group
+    from rmgpy.quantity import ScalarQuantity
+    from rmgpy.kinetics.uncertainties import RateUncertainty
+    from rmgpy.molecule.atomtype import ATOMTYPES
+    from rmgpy.molecule.element import bde_elements
 from pysidt.extensions import split_mols, get_extension_edge, generate_extensions_reverse
 from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *

@@ -3,10 +3,16 @@ from copy import deepcopy
 
 import numpy as np
 
-from molecule.molecule.atomtype import ATOMTYPES
-from molecule.molecule.element import bde_elements
-from molecule.molecule.group import GroupAtom, GroupBond
-from molecule.molecule.molecule import Molecule
+try:
+    from molecule.molecule.atomtype import ATOMTYPES
+    from molecule.molecule.element import bde_elements
+    from molecule.molecule.group import GroupAtom, GroupBond
+    from molecule.molecule.molecule import Molecule
+except:
+    from rmgpy.molecule.atomtype import ATOMTYPES
+    from rmgpy.molecule.element import bde_elements
+    from rmgpy.molecule.group import GroupAtom, GroupBond
+    from rmgpy.molecule.molecule import Molecule
 
 
 def split_mols(data, newgrp):

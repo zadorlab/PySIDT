@@ -1,4 +1,7 @@
-from molecule.molecule.atomtype import ATOMTYPES
+try:
+    from molecule.molecule.atomtype import ATOMTYPES
+except:
+    from rmgpy.molecule.atomtype import ATOMTYPES
 from pysidt.utils import data_matches_node
 import itertools
 
