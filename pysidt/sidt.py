@@ -542,11 +542,11 @@ class SubgraphIsomorphicDecisionTree:
         simple_regularization(
             self,
             self.nodes["Root"],
-            self.r,
-            self.r_bonds,
-            self.r_un,
-            self.r_site,
-            self.r_morph,
+            self.r if not self.r or not isinstance(self.r[0],list) else sum(self.r,[]),
+            self.r_bonds if not self.r_bonds or not isinstance(self.r_bonds[0],list) else sum(self.r_bonds,[]),
+            self.r_un if not self.r_un or not isinstance(self.r_un[0],list) else sum(self.r_un,[]),
+            self.r_site if not self.r_site or not isinstance(self.r_site[0],list) else sum(self.r_site,[]),
+            self.r_morph if not self.r_morph or not isinstance(self.r_morph[0],list) else sum(self.r_morph,[]),
         )
     
     def scale_uncertainties(self,validation_set=None):
