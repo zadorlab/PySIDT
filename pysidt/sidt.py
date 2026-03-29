@@ -714,6 +714,76 @@ class SubgraphIsomorphicDecisionTree:
             self.r_ncoord if self.r_ncoord and not isinstance(self.r_ncoord[0],list) else sum(self.r_ncoord,[]),
         )
     
+    def prune(self,validation_set,N=100):
+        unc_scales = np.array(sorted([np.sqrt(n.rule.uncertainty)*n.rule.num_data for n in self.nodes.values() if n.children]))
+        unc_xs = list(range(len(unc_scales)))
+        xs_evals = np.linspace(0,max(unc_xs),N)
+        uncertainty_cutoffs = np.interp(xs_evals,unc_xs,unc_scales)
+        
+        best_nodedict = {k: {"group": n.group, "rule": n.rule,"parent": n.parent.name if n.parent else None,
+                             "children": [x.name for x in n.children], "name": n.name, "depth": n.depth} for k,n in self.nodes.items()}
+        
+        best_val_error = np.mean(np.abs([self.evaluate(d.mol) - d.value for d in validation_set]))
+        logging.info("Initial Validation Error: {} MAE".format(best_val_error))
+        for uncertainty_cutoff in uncertainty_cutoffs:
+            logging.info("Running uncertainty_cutoff: {}".format(uncertainty_cutoff))
+            nodes_to_check = self.root.children #start with root children
+            nodes_to_remove = []
+            while len(nodes_to_check) > 0:
+                new_nodes_to_check = []
+                for n in nodes_to_check:
+                    if n.name not in nodes_to_remove:
+                        derror =  np.sqrt(n.rule.uncertainty)*n.rule.num_data
+                        if derror < uncertainty_cutoff:
+                            nodes_to_remove.extend([child.name for child in n.children])
+                        else:
+                            new_nodes_to_check.extend(n.children)
+                nodes_to_check = new_nodes_to_check
+
+            while nodes_to_remove:
+                new_nodes_to_remove = []
+                for k in nodes_to_remove:
+                    new_nodes_to_remove.extend([x.name for x in self.nodes[k].children])
+                    del self.nodes[k]
+                nodes_to_remove = new_nodes_to_remove
+                
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
+            
+            logging.info("Node Number: {}".format(len(self.nodes)))
+            val_error = np.mean(np.abs([self.evaluate(d.mol) - d.value for d in validation_set]))
+            logging.info("Validation Error on error_diff: {} MAE".format(val_error))
+            if val_error < best_val_error:
+                logging.info("Validation Error is best so far")
+                best_nodedict = {k: {"group": n.group, "rule": n.rule,"parent": n.parent.name if n.parent else None,
+                             "children": [x.name for x in n.children], "name": n.name, "depth": n.depth} for k,n in self.nodes.items()}
+                best_val_error = val_error
+
+        logging.info("Pruned to Validation MAE of {0} and {1} nodes".format(best_val_error,len(best_nodedict)))
+        nodes = dict()
+        for n, d in best_nodedict.items():
+            nodes[n] = Node(
+                group=d['group'],
+                rule=d["rule"],
+                parent=d["parent"],
+                children=d["children"],
+                name=d["name"],
+                depth=d["depth"],
+            )
+            
+        for n, node in nodes.items():
+            if node.parent:
+                node.parent = nodes[node.parent]
+            node.children = [nodes[child] for child in node.children]
+
+        self.nodes = nodes
+        self.root = self.nodes["Root"]
+    
     def scale_uncertainties(self,validation_set=None):
         """
         rescales uncertainty predictions by a constant to better match validation errors
