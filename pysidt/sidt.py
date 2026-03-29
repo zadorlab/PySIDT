@@ -231,17 +231,39 @@ class SubgraphIsomorphicDecisionTree:
 
     def select_node(self):
         """
-        Picks a node to expand
+        Picks the nodes with the largest magintude rule values
         """
-        for name, node in self.nodes.items():
-            if len(node.items) <= 1 or node.name in self.skip_nodes:
-                continue
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes
+            ]
+        else:
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes]
 
-            if self.uncertainty_prepruning and is_prepruned_by_uncertainty(node):
-                continue
-
-            logging.info("Selected node {}".format(node.name))
-            logging.info("Node has {} items".format(len(node.items)))
+        if len(selectable_nodes) > 0:
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    node.rule.uncertainty * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    node.rule.uncertainty
+                    if len(node.items) > 1
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            inds = np.argsort(rulevals)
+            nodes = [
+                selectable_nodes[ind] for ind in inds if len(selectable_nodes[ind].items) > 1 and not np.isnan(rulevals[ind])
+            ]
+            if len(nodes) == 0:
+                return None
+            node = nodes[-1]
             return node
         else:
             return None
