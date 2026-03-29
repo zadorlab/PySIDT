@@ -567,7 +567,7 @@ class SubgraphIsomorphicDecisionTree:
             self.descend_training_from_top()
         
         for node in self.nodes.values():
-            if node != self.root:
+            if node != self.root and node.rule is None:
                 self.fit_node(node, skip_val=True)
                 
         if checkpoint_every is not None and self.root.name == "Root":
