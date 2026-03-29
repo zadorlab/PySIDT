@@ -437,6 +437,7 @@ class SubgraphIsomorphicDecisionTree:
         )
         self.nodes[name] = node
         parent.children.append(node)
+        self.fit_node(node)
         if grpc and all(st.mol.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
@@ -457,6 +458,7 @@ class SubgraphIsomorphicDecisionTree:
             self.nodes[cextname] = nodec
             parent.children.append(nodec)
             parent.items = []
+            self.fit_node(nodec)
         else:
             for mol in new:
                 parent.items.remove(mol)
