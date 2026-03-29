@@ -16,12 +16,14 @@ from pysidt.decomposition import *
 from pysidt.utils import *
 import numpy as np
 import multiprocess as mp
+import os
 import logging
 import json
 from sklearn import linear_model
 from scipy.optimize import minimize
 import scipy.sparse as sp
 import scipy
+import pickle
 
 logging.basicConfig(level=logging.INFO)
 
@@ -495,7 +497,7 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False, nprocs=1):
+    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False, nprocs=1, checkpoint_every=None):
         """
         generate nodes for the tree based on the supplied data
         """
@@ -504,6 +506,9 @@ class SubgraphIsomorphicDecisionTree:
         
         if nprocs > 1 and (validation_set or scale_uncertainties):
             raise ValueError("Continuous postpruning tracking is not performant when running in parallel. To run in parallel specify validation_set=None and scale_uncertainties=False and after training (and regularization) use self.prune and self.scale_uncertainties")
+        
+        if nprocs > 1 and checkpoint_every is not None:
+            logging.warning("When running in parallel checkpointing is only done for the root process.")
         
         self.validation_set = validation_set
         self.min_val_error = np.inf
@@ -565,6 +570,10 @@ class SubgraphIsomorphicDecisionTree:
             if node != self.root:
                 self.fit_node(node, skip_val=True)
                 
+        if checkpoint_every is not None and self.root.name == "Root":
+            next_checkpoint = checkpoint_every
+            last_checkpoint_file = None
+
         node = self.select_node()
         logging.info(node)
         while True:
@@ -603,6 +612,18 @@ class SubgraphIsomorphicDecisionTree:
                 
             if len(self.nodes) > self.max_nodes and len(self.active_procs) == 0:
                 break
+            
+            if self.root.name == "Root" and checkpoint_every is not None and len(self.nodes) > next_checkpoint:
+                logging.info("Writing checkpoing at {} nodes".format(len(self.nodes)))
+                checkpoint_nodes = {k:{"group":n.group,"rule":n.rule,"parent":n.parent.name if n.parent else None,"children":[x.name for x in n.children],"name":n.name,"depth":n.depth} for k,n in self.nodes.items()}
+                checkpoint_file = "sidt_checkpoint_{}_nodes.pkl".format(len(self.nodes))
+                with open(checkpoint_file,'wb') as f:
+                    pickle.dump(checkpoint_nodes,f)
+                if last_checkpoint_file:
+                    os.remove(last_checkpoint_file)
+                last_checkpoint_file = checkpoint_file
+                next_checkpoint += checkpoint_every
+            
             if not node and len(self.active_procs) == 0:
                 logging.info("Did not find any nodes to expand")
                 break
