@@ -8,6 +8,7 @@ dependencies:
   - python >=3.7,<3.10
   - jupyter
   - matplotlib
+  - multiprocess
   - nose
   - numpy
   - pydot
