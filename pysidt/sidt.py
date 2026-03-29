@@ -532,45 +532,9 @@ class SubgraphIsomorphicDecisionTree:
         if scale_uncertainties:
             self.scale_uncertainties(validation_set=validation_set)
         
-    def fit_tree(self, data=None):
-        """
-        fit rule for each node
-        """
-        if data:
-            self.clear_data()
-            self.root.items = data[:]
-            self.descend_training_from_top(only_specific_match=False)
 
-        for node in self.nodes.values():
-            if not node.items:
-                logging.warning(f"Node: {node.name} was empty")
-                node.rule = None 
-                continue
-            
 
-            node_data = [d.value for d in node.items]
-            n = len(node_data)
-            wsum = sum(d.weight for d in node.items)
-            wsq_sum = sum(d.weight**2 for d in node.items)
-            if (wsum - wsq_sum/wsum) > 1e-3: 
-                data_mean = sum(d.value * d.weight for d in node.items) / wsum
-                data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
-            else: #primarily if weights are all 1.0
-                data_mean = np.mean(node_data)
-                data_var = np.var(node_data)
-            
-            if n == 1:
-                node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
-            else:    
-                node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
         
-        for node in self.nodes.values():
-            n = node
-            while n.rule is None:
-                n = n.parent
-            node.rule = n.rule
-            if node.rule.uncertainty is None:
-                node.rule.uncertainty = node.parent.rule.uncertainty
 
     def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
