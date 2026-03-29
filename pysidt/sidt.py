@@ -123,6 +123,7 @@ class SubgraphIsomorphicDecisionTree:
         max_nodes=np.inf,
         reverse_extension_generation_allowed=True,
         max_ring_gen_size=None,
+        weigh_node_selection_by_occurrence=True,
     ):
         if nodes is None:
             nodes = {}
@@ -161,6 +162,7 @@ class SubgraphIsomorphicDecisionTree:
         self.stuctures_for_extension_generation = None 
         self.node_uncertainties = None
         self.reverse_extension_generation_allowed = reverse_extension_generation_allowed
+        self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -810,11 +812,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             uncertainty_prepruning=uncertainty_prepruning,
             reverse_extension_generation_allowed=reverse_extension_generation_allowed,
             max_ring_gen_size=max_ring_gen_size,
+            weigh_node_selection_by_occurrence=weigh_node_selection_by_occurrence,
         )
 
-        
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
-        self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
         self.decomposition = decomposition
         self.mol_submol_node_maps = None
         self.data_delta = None
