@@ -15,6 +15,7 @@ from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
 from pysidt.utils import *
 import numpy as np
+import multiprocess as mp
 import logging
 import json
 from sklearn import linear_model
@@ -494,47 +495,169 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False):
+    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False, nprocs=1):
         """
         generate nodes for the tree based on the supplied data
         """
         np.random.seed(0)
         self.check_subgraph_isomorphic()
-
+        
+        if nprocs > 1 and (validation_set or scale_uncertainties):
+            raise ValueError("Continuous postpruning tracking is not performant when running in parallel. To run in parallel specify validation_set=None and scale_uncertainties=False and after training (and regularization) use self.prune and self.scale_uncertainties")
+        
+        self.validation_set = validation_set
+        self.min_val_error = np.inf
         self.skip_nodes = []
-
+        self.active_procs = dict()
+        self.active_conns = dict()
+        self.active_proc_names = dict()
+        self.proc_nprocs = dict()
+        self.proc_Ndata = dict()
+        self.proc_max_nodes = dict()
+        self.proc_trees = dict()
+        
+        def _spawn_subtree_process(node, nprocs, subtree_max_nodes):
+            data = node.items
+            n = Node(node.group,items=[],rule=node.rule,parent=None,children=[],name=node.name,depth=node.depth)
+            if self.validation_set:
+                val_set_subtree = []
+                for d in self.validation_set: #only validate against validation set items that would evaluate on this subtree
+                    if d.mol.is_subgraph_isomorphic(n.group, generate_initial_map=True, save_order=True):
+                        val_set_subtree.append(d)
+            else:
+                val_set_subtree = None
+            queue = mp.Queue()
+            p = mp.Process(target=run_process,
+                           args=(type(self),node,data,val_set_subtree,nprocs,subtree_max_nodes,self.n_strucs_min,self.iter_max,self.iter_item_cap,
+               self.max_structures_to_generate_extensions,self.choose_extension_based_on_subsamples,self.r,self.r_bonds,self.r_un,self.r_site,self.r_morph,
+               self.r_ncoord,self.uncertainty_prepruning,self.reverse_extension_generation_allowed,queue))
+            p.start()
+            return queue,p
+        
         if check_data:
             for datum in data:
-                if not datum.mol.is_subgraph_isomorphic(
-                    self.root.group, generate_initial_map=True, save_order=True
-                ):
-                    logging.info("Datum did not match Root node:")
-                    logging.info(datum.mol.to_adjacency_list())
-                    raise ValueError
+                if self.root.group:
+                    if not datum.mol.is_subgraph_isomorphic(
+                        self.root.group, generate_initial_map=True, save_order=True
+                    ):
+                        logging.info("Datum did not match Root node:")
+                        logging.info(datum.mol.to_adjacency_list())
+                        raise ValueError
+                else:
+                    for n in self.root.children:
+                        if datum.mol.is_subgraph_isomorphic(n.group, generate_initial_map=True, save_order=True):
+                            break
+                    else:
+                        logging.info("Datum did not match Root node:")
+                        logging.info(datum.mol.to_adjacency_list())
+                        raise ValueError
         
         self.root.items = data[:]
         
+        N_data_main = len(data)
+        
+        self.fit_node(self.root,skip_val=True)
+        
         if len(self.nodes) > 1:
             self.descend_training_from_top()
+        
+        for node in self.nodes.values():
+            if node != self.root:
+                self.fit_node(node, skip_val=True)
                 
         node = self.select_node()
         logging.info(node)
         while True:
-            if len(self.nodes) > self.max_nodes:
+            if len(self.active_procs) > 0:
+                remove_names = []
+                for name in self.active_procs.keys():  # check if any processes have finished
+                    if self.active_conns[name].empty():
+                        continue
+                    else:
+                        new_nodes = self.active_conns[name].get()
+                    logging.error("merging back in process associated with node {0} to {1}".format(name,self.root.name))
+                    logging.error("main tree has {} nodes".format(len(self.nodes)))
+                    logging.error("subtree has {} nodes".format(len(new_nodes)))
+                    self.active_procs[name].terminate()
+                    n = new_nodes[name]
+                    n.parent = self.nodes[name].parent
+                    n.children = self.nodes[name].children + n.children
+                    for child in n.children:
+                        child.parent = n
+                    ind = self.nodes[name].parent.children.index(self.nodes[name])
+                    self.nodes[name].parent.children[ind] = n
+                    self.nodes = {**self.nodes,**new_nodes} #node started taken from new_nodes
+                    logging.error("after merge have {} nodes".format(len(self.nodes)))
+                    self.skip_nodes.remove(name)
+                    remove_names.append(name)
+                remove_names.reverse()
+                for name in remove_names:  # remove finished process objects
+                    nprocs += self.proc_nprocs[name]
+                    self.max_nodes += self.proc_max_nodes[name]
+                    N_data_main += self.proc_Ndata[name]
+                    del self.active_procs[name]
+                    del self.active_conns[name]
+                    del self.proc_nprocs[name]
+                    del self.proc_Ndata[name]
+                    del self.proc_max_nodes[name]
+                
+            if len(self.nodes) > self.max_nodes and len(self.active_procs) == 0:
                 break
-            if not node:
+            if not node and len(self.active_procs) == 0:
                 logging.info("Did not find any nodes to expand")
                 break
-            else:
-                self.extend_tree_from_node(node)
+            elif node:
+                sub_nprocs = np.floor(nprocs*len(node.items)/N_data_main)
+                if sub_nprocs >= nprocs:
+                    sub_nprocs -= 1
+                if node != self.root and len(self.nodes) > 1 and nprocs != 1 and len(node.items) > 20 and sub_nprocs > 1:
+                    logging.error("launching subprocess with sub_nprocs: {}".format(sub_nprocs))
+                    logging.error("subprocess is launched on node.items: {}".format(len(node.items)))
+                    subtree_max_nodes = np.floor(len(node.items)/N_data_main*(self.max_nodes-len(self.nodes)))
+                    logging.error("splitting off on node {0} from {1} with {2} nprocs and {3} max_nodes".format(node.name,self.root.name,sub_nprocs,subtree_max_nodes))
+                    self.max_nodes -= subtree_max_nodes
+                    nprocs -= sub_nprocs
+                    N_data_main -= len(node.items)
+                    logging.error("decremented max_nodes: {0} nprocs: {1}".format(self.max_nodes,nprocs))
+                    assert nprocs >= 1
+                    queue, p = _spawn_subtree_process(node, nprocs, subtree_max_nodes)
+                    self.active_procs[node.name] = p
+                    self.active_conns[node.name] = queue #parent_conn
+                    self.proc_nprocs[node.name] = sub_nprocs
+                    self.proc_max_nodes[node.name] = subtree_max_nodes
+                    self.proc_Ndata[node.name] = len(node.items)
+                    self.skip_nodes.append(node.name)
+                else:
+                    self.extend_tree_from_node(node)
+            
             node = self.select_node()
+
+        if self.validation_set:
+            logging.info("Postpruning based on best validation error to: {} MAE".format(self.min_val_error))
+            nodes_to_remove = []
+            for k in list(self.nodes.keys()):
+                if k not in self.best_tree_nodes:
+                    nodes_to_remove.append(k)
+
+            node_back_mapping = dict()
+            for k in nodes_to_remove:
+                parent = self.nodes[k]
+                while parent.name in nodes_to_remove:
+                    parent = parent.parent
+                node_back_mapping[self.nodes[k]] = parent
+                parent.items.extend(self.nodes[k].items)
+                del self.nodes[k]
+
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
         
         if scale_uncertainties:
             self.scale_uncertainties(validation_set=validation_set)
-        
-
-
-        
 
     def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
