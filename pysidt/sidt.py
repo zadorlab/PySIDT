@@ -630,6 +630,30 @@ class SubgraphIsomorphicDecisionTree:
         for i, node in enumerate(self.nodes.keys()):
             self.nodes[node].rule.uncertainty = self.node_uncertainties[node]
 
+def run_process(constructor,node,data,validation_set,nprocs,subtree_max_nodes,n_strucs_min,iter_max,iter_item_cap,
+               max_structures_to_generate_extensions,choose_extension_based_on_subsamples,r,r_bonds,r_un,r_site,r_morph,
+               r_ncoord,uncertainty_prepruning,reverse_extension_generation_allowed,queue):
+    subtree = constructor(
+            nodes={node.name:node},
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            uncertainty_prepruning=uncertainty_prepruning,
+            max_nodes=subtree_max_nodes,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+        )
+    subtree.root = node
+    subtree.generate_tree(data,validation_set=validation_set,scale_uncertainties=False,nprocs=nprocs)
+    queue.put(subtree.nodes)
+
 def to_dict(obj):
     out_dict = dict()
     out_dict["class"] = obj.__class__.__name__
