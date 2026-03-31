@@ -68,6 +68,7 @@ def get_extension_edge(
     r_morph=None,
     r_ncoord=None,
     r_label=None,
+    r_lone_pairs=None,
     just_reg_dim=False, #determine reg_dims for group only
     max_ring_gen_size=None,
 ):
@@ -96,6 +97,8 @@ def get_extension_edge(
         r_morph = []
     if r_label is None:
         r_label = None
+    if r_lone_pairs is None:
+        r_lone_pairs = []
 
     out_exts = [[]]
     grps = [[group]]
@@ -118,6 +121,7 @@ def get_extension_edge(
             r_morph_full=r_morph,
             r_ncoord_full=r_ncoord,
             r_label=r_label,
+            r_lone_pairs_full=r_lone_pairs,
             n_strucs_min=n_strucs_min,
             max_ring_gen_size=max_ring_gen_size,
         )
@@ -156,6 +160,10 @@ def get_extension_edge(
                     reg_dict[(typ, indc)][0].extend(
                         grp2.atoms[indc[0]].radical_electrons
                     )
+                elif typ == "lonepairExt":
+                    reg_dict[(typ, indc)][0].extend(
+                        grp2.atoms[indc[0]].lone_pairs
+                    )
                 elif typ == "bondExt":
                     reg_dict[(typ, indc)][0].extend(
                         grp2.get_bond(grp2.atoms[indc[0]], grp2.atoms[indc[1]]).order
@@ -178,6 +186,13 @@ def get_extension_edge(
                     )
                     reg_dict[(typ, indc)][1].extend(
                         grp2.atoms[indc[0]].radical_electrons
+                    )
+                elif typ == "lonepairExt":
+                    reg_dict[(typ, indc)][0].extend(
+                        grp2.atoms[indc[0]].lone_pairs
+                    )
+                    reg_dict[(typ, indc)][1].extend(
+                        grp2.atoms[indc[0]].lone_pairs
                     )
                 elif typ == "bondExt":
                     reg_dict[(typ, indc)][0].extend(
@@ -218,6 +233,8 @@ def get_extension_edge(
                         grp.atoms[indcr[0]].reg_dim_atm = list(reg_val)
                     elif typr == "elExt":
                         grp.atoms[indcr[0]].reg_dim_u = list(reg_val)
+                    elif typr == "lonepairExt":
+                        grp.atoms[indcr[0]].reg_dim_p = list(reg_val)
                     elif typr == "siteExt":
                         grp.atoms[indcr[0]].reg_dim_site = list(reg_val)
                     elif typr == "morphExt":
@@ -244,6 +261,10 @@ def get_extension_edge(
                         grp2.atoms[indcr[0]].reg_dim_u = list(reg_val)
                         if grpc:
                             grpc.atoms[indcr[0]].reg_dim_u = list(reg_val)
+                    elif typr == "lonepairExt":
+                        grp2.atoms[indcr[0]].reg_dim_p = list(reg_val)
+                        if grpc:
+                            grpc.atoms[indcr[0]].reg_dim_p = list(reg_val)
                     elif typr == "siteExt":
                         grp2.atoms[indcr[0]].reg_dim_site = list(reg_val)
                         if grpc:
@@ -296,6 +317,10 @@ def get_extension_edge(
                         grp2.atoms[indcr[0]].reg_dim_u = list(reg_val)
                         if grpc:
                             grpc.atoms[indcr[0]].reg_dim_u = list(reg_val)
+                    elif typr == "lonepairExt":
+                        grp2.atoms[indcr[0]].reg_dim_p = list(reg_val)
+                        if grpc:
+                            grpc.atoms[indcr[0]].reg_dim_p = list(reg_val)
                     elif typr == "siteExt":
                         grp2.atoms[indcr[0]].reg_dim_site = list(reg_val)
                         if grpc:
@@ -384,6 +409,7 @@ def get_extensions(
     r_morph_full=[],
     r_ncoord_full=[],
     r_label=[],
+    r_lone_pairs_full=[],
     basename="",
     atm_ind=None,
     atm_ind2=None,
@@ -418,6 +444,12 @@ def get_extensions(
         else:
             r_un = r_un_full[:]
     
+    if r_lone_pairs_full:
+        if isinstance(r_lone_pairs_full[0],list):
+            r_lone_pairs = [x for y in r_lone_pairs_full for x in y]
+        else:
+            r_lone_pairs = r_lone_pairs_full[:]
+            
     if r_site_full:
         if isinstance(r_site_full[0],list):
             r_site = [x for y in r_site_full for x in y]
@@ -521,38 +553,72 @@ def get_extensions(
                             grp, i, basename, list(set(typ) & set(atm.reg_dim_atm[0])), r_full
                         )
                     )
-            if not atm.reg_dim_u[0]:
-                if len(atm.radical_electrons) != 1:
-                    if len(atm.radical_electrons) == 0:
-                        extents.extend(
-                            specify_unpaired_extensions(grp, i, basename, r_un, r_un_full)
-                        )
-                    else:
-                        extents.extend(
-                            specify_unpaired_extensions(
-                                grp, i, basename, atm.radical_electrons, r_un_full
+            if r_un_full:
+                if not atm.reg_dim_u[0]:
+                    if len(atm.radical_electrons) != 1:
+                        if len(atm.radical_electrons) == 0:
+                            extents.extend(
+                                specify_unpaired_extensions(grp, i, basename, r_un, r_un_full)
                             )
-                        )
-            else:
-                if len(atm.radical_electrons) != 1 and len(atm.reg_dim_u[0]) != 1:
-                    if len(atm.radical_electrons) == 0:
-                        extents.extend(
-                            specify_unpaired_extensions(
-                                grp, i, basename, atm.reg_dim_u[0], r_un_full
+                        else:
+                            extents.extend(
+                                specify_unpaired_extensions(
+                                    grp, i, basename, atm.radical_electrons, r_un_full
+                                )
                             )
-                        )
-                    else:
-                        extents.extend(
-                            specify_unpaired_extensions(
-                                grp,
-                                i,
-                                basename,
-                                list(
-                                    set(atm.radical_electrons) & set(atm.reg_dim_u[0])
-                                ),
-                                r_un_full,
+                else:
+                    if len(atm.radical_electrons) != 1 and len(atm.reg_dim_u[0]) != 1:
+                        if len(atm.radical_electrons) == 0:
+                            extents.extend(
+                                specify_unpaired_extensions(
+                                    grp, i, basename, atm.reg_dim_u[0], r_un_full
+                                )
                             )
-                        )
+                        else:
+                            extents.extend(
+                                specify_unpaired_extensions(
+                                    grp,
+                                    i,
+                                    basename,
+                                    list(
+                                        set(atm.radical_electrons) & set(atm.reg_dim_u[0])
+                                    ),
+                                    r_un_full,
+                                )
+                            )
+            if r_lone_pairs_full:
+                if not atm.reg_dim_p[0]:
+                    if len(atm.lone_pairs) != 1:
+                        if len(atm.lone_pairs) == 0:
+                            extents.extend(
+                                specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full)
+                            )
+                        else:
+                            extents.extend(
+                                specify_lone_pair_extensions(
+                                    grp, i, basename, atm.lone_pairs, r_lone_pairs_full
+                                )
+                            )
+                else:
+                    if len(atm.lone_pairs) != 1 and len(atm.reg_dim_p[0]) != 1:
+                        if len(atm.lone_pairs) == 0:
+                            extents.extend(
+                                specify_lone_pair_extensions(
+                                    grp, i, basename, atm.reg_dim_p[0], r_lone_pairs_full
+                                )
+                            )
+                        else:
+                            extents.extend(
+                                specify_lone_pair_extensions(
+                                    grp,
+                                    i,
+                                    basename,
+                                    list(
+                                        set(atm.lone_pairs) & set(atm.reg_dim_p[0])
+                                    ),
+                                    r_lone_pairs_full,
+                                )
+                            )
             if r_site_full:
                 if not atm.reg_dim_site[0]:
                     if len(atm.site) != 1:
@@ -750,32 +816,60 @@ def get_extensions(
                         grp, i, basename, list(set(typ) & set(atm.reg_dim_atm[0])), r_full
                     )
                 )
-        if not atm.reg_dim_u:
-            if len(atm.radical_electrons) != 1:
-                if len(atm.radical_electrons) == 0:
-                    extents.extend(specify_unpaired_extensions(grp, i, basename, r_un, r_un_full))
-                else:
-                    extents.extend(
-                        specify_unpaired_extensions(
-                            grp, i, basename, atm.radical_electrons, r_un_full
+        if r_un_full:
+            if not atm.reg_dim_u:
+                if len(atm.radical_electrons) != 1:
+                    if len(atm.radical_electrons) == 0:
+                        extents.extend(specify_unpaired_extensions(grp, i, basename, r_un, r_un_full))
+                    else:
+                        extents.extend(
+                            specify_unpaired_extensions(
+                                grp, i, basename, atm.radical_electrons, r_un_full
+                            )
                         )
-                    )
-        else:
-            if len(atm.radical_electrons) != 1 and len(atm.reg_dim_u[0]) != 1:
-                if len(atm.radical_electrons) == 0:
-                    extents.extend(
-                        specify_unpaired_extensions(grp, i, basename, atm.reg_dim_u[0], r_un_full)
-                    )
-                else:
-                    extents.extend(
-                        specify_unpaired_extensions(
-                            grp,
-                            i,
-                            basename,
-                            list(set(atm.radical_electrons) & set(atm.reg_dim_u[0])),
-                            r_un_full,
+            else:
+                if len(atm.radical_electrons) != 1 and len(atm.reg_dim_u[0]) != 1:
+                    if len(atm.radical_electrons) == 0:
+                        extents.extend(
+                            specify_unpaired_extensions(grp, i, basename, atm.reg_dim_u[0], r_un_full)
                         )
-                    )
+                    else:
+                        extents.extend(
+                            specify_unpaired_extensions(
+                                grp,
+                                i,
+                                basename,
+                                list(set(atm.radical_electrons) & set(atm.reg_dim_u[0])),
+                                r_un_full,
+                            )
+                        )
+        if r_lone_pairs_full:
+            if not atm.reg_dim_p:
+                if len(atm.lone_pairs) != 1:
+                    if len(atm.lone_pairs) == 0:
+                        extents.extend(specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full))
+                    else:
+                        extents.extend(
+                            specify_lone_pair_extensions(
+                                grp, i, basename, atm.lone_pairs, r_lone_pairs_full
+                            )
+                        )
+            else:
+                if len(atm.lone_pairs) != 1 and len(atm.reg_dim_p[0]) != 1:
+                    if len(atm.lone_pairs) == 0:
+                        extents.extend(
+                            specify_lone_pair_extensions(grp, i, basename, atm.reg_dim_p[0], r_lone_pairs_full)
+                        )
+                    else:
+                        extents.extend(
+                            specify_lone_pair_extensions(
+                                grp,
+                                i,
+                                basename,
+                                list(set(atm.lone_pairs) & set(atm.reg_dim_p[0])),
+                                r_lone_pairs_full,
+                            )
+                        )
         if r_site_full:
             if not atm.reg_dim_site:
                 if len(atm.site) != 1:
@@ -1040,6 +1134,50 @@ def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full):
 
     return grps
 
+def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full):
+    """
+    generates extensions for specification of the number of lone pairs on a given atom
+    """
+
+    grps = []
+    label_list = []
+
+    Rset = set(r_lone_pairs)
+    if isinstance(r_lone_pairs_full[0],list):
+        r_spc_lone_pairs_full = [[y for y in x if y in r_lone_pairs] for x in r_lone_pairs_full]
+        if len(r_spc_lone_pairs_full) == 1:
+            r_spc_lone_pairs_full = [[x] for x in r_spc_lone_pairs_full[0]]
+        else:
+            r_spc_lone_pairs_full += [[x] for x in sum(r_spc_lone_pairs_full,[]) if [x] not in r_spc_lone_pairs_full]
+    else:
+        r_spc_lone_pairs_full = [[x] for x in r_lone_pairs_full if x in r_lone_pairs]
+    for item in r_spc_lone_pairs_full:
+        g = deepcopy(grp)
+        grpc = deepcopy(grp)
+        g.atoms[i].lone_pairs = item
+        grpc.atoms[i].lone_pairs = list(Rset - set(item))
+
+        if len(grpc.atoms[i].lone_pairs) == 0:
+            grpc = None
+
+        atom_type = g.atoms[i].atomtype
+
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
+
+        grps.append(
+            (g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,))
+        )
+
+    return grps
 
 def specify_site_extensions(grp, i, basename, r_site, r_site_full):
     """

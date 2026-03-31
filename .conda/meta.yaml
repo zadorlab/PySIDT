@@ -17,6 +17,7 @@ requirements:
     - python
     - jupyter
     - matplotlib
+    - multiprocess
     - nose
     - numpy
     - pydot
@@ -27,6 +28,7 @@ requirements:
     - python
     - jupyter
     - matplotlib
+    - multiprocess
     - nose
     - {{ pin_compatible('numpy') }}
     - pydot

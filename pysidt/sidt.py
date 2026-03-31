@@ -15,12 +15,15 @@ from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
 from pysidt.utils import *
 import numpy as np
+import multiprocess as mp
+import os
 import logging
 import json
 from sklearn import linear_model
 from scipy.optimize import minimize
 import scipy.sparse as sp
 import scipy
+import pickle
 
 logging.basicConfig(level=logging.INFO)
 
@@ -99,8 +102,10 @@ class SubgraphIsomorphicDecisionTree:
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
         `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_lone_pairs`: pairs of electrons to generate extensions. If None ignored.
         `r_site`: surface sites to generate extensions. If None, [] will be used.
         `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+        `r_ncoord`: atom coordination numbers to generate extensions. if None ignored.
     """
     def __init__(
         self,
@@ -119,10 +124,12 @@ class SubgraphIsomorphicDecisionTree:
         r_morph=None,
         r_ncoord=None,
         r_label=None,
+        r_lone_pairs=None,
         uncertainty_prepruning=False,
         max_nodes=np.inf,
         reverse_extension_generation_allowed=True,
         max_ring_gen_size=None,
+        weigh_node_selection_by_occurrence=True,
     ):
         if nodes is None:
             nodes = {}
@@ -141,6 +148,8 @@ class SubgraphIsomorphicDecisionTree:
             r_ncoord = []
         if r_label is None:
             r_label = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
         self.nodes = nodes
         self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
@@ -152,6 +161,7 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.r_ncoord = r_ncoord
         self.r_label = r_label
+        self.r_lone_pairs = r_lone_pairs
         self.max_ring_gen_size = max_ring_gen_size
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
@@ -161,6 +171,7 @@ class SubgraphIsomorphicDecisionTree:
         self.stuctures_for_extension_generation = None 
         self.node_uncertainties = None
         self.reverse_extension_generation_allowed = reverse_extension_generation_allowed
+        self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
         
         if len(nodes) > 0:
             node = nodes[list(nodes.keys())[0]]
@@ -229,21 +240,82 @@ class SubgraphIsomorphicDecisionTree:
 
     def select_node(self):
         """
-        Picks a node to expand
+        Picks the nodes with the largest magintude rule values
         """
-        for name, node in self.nodes.items():
-            if len(node.items) <= 1 or node.name in self.skip_nodes:
-                continue
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes
+            ]
+        else:
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes]
 
-            if self.uncertainty_prepruning and is_prepruned_by_uncertainty(node):
-                continue
-
-            logging.info("Selected node {}".format(node.name))
-            logging.info("Node has {} items".format(len(node.items)))
+        if len(selectable_nodes) > 0:
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    node.rule.uncertainty * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    node.rule.uncertainty
+                    if len(node.items) > 1
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            inds = np.argsort(rulevals)
+            nodes = [
+                selectable_nodes[ind] for ind in inds if len(selectable_nodes[ind].items) > 1 and not np.isnan(rulevals[ind])
+            ]
+            if len(nodes) == 0:
+                return None
+            node = nodes[-1]
             return node
         else:
             return None
 
+    def fit_node(self, node, skip_val=False):
+        if not node.items:
+            logging.warning(f"Node: {node.name} was empty")
+            node.rule = None 
+            return
+        
+        node_data = [d.value for d in node.items]
+        n = len(node_data)
+        wsum = sum(d.weight for d in node.items)
+        wsq_sum = sum(d.weight**2 for d in node.items)
+        if (wsum - wsq_sum/wsum) > 1e-3: 
+            data_mean = sum(d.value * d.weight for d in node.items) / wsum
+            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+        else: #primarily if weights are all 1.0
+            data_mean = np.mean(node_data)
+            data_var = np.var(node_data)
+        
+        if n == 1:
+            node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
+        else:    
+            node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
+
+        n = node
+        while n.rule is None:
+            n = n.parent
+        node.rule = n.rule
+        if node.rule.uncertainty is None:
+            node.rule.uncertainty = node.parent.rule.uncertainty
+
+        if not skip_val and self.validation_set:
+            val_error = [self.evaluate(d.mol) - d.value for d in self.validation_set]
+            val_mae = np.mean(np.abs(np.array(val_error)))
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
+                self.best_tree_nodes = list(self.nodes.keys())
+            self.val_mae = val_mae
+            logging.info("Root: {0}  Nodes: {1}".format(self.root.name,len(self.nodes)))
+            logging.info("validation MAE: {}".format(self.val_mae))
+        
     def generate_extensions(self, node, recursing=False, just_reg_dim=False):
         """
         Generates set of extension groups to a node
@@ -273,6 +345,7 @@ class SubgraphIsomorphicDecisionTree:
             r_morph=self.r_morph,
             r_ncoord=self.r_ncoord,
             r_label=self.r_label,
+            r_lone_pairs=self.r_lone_pairs,
             iter_max=self.iter_max,
             iter_item_cap=self.iter_item_cap,
             just_reg_dim=just_reg_dim,
@@ -374,6 +447,7 @@ class SubgraphIsomorphicDecisionTree:
         )
         self.nodes[name] = node
         parent.children.append(node)
+        self.fit_node(node)
         if grpc and all(st.mol.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
@@ -394,6 +468,7 @@ class SubgraphIsomorphicDecisionTree:
             self.nodes[cextname] = nodec
             parent.children.append(nodec)
             parent.items = []
+            self.fit_node(nodec)
         else:
             for mol in new:
                 parent.items.remove(mol)
@@ -429,83 +504,194 @@ class SubgraphIsomorphicDecisionTree:
         for node in self.nodes.values():
             node.items = []
 
-    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False):
+    def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False, nprocs=1, checkpoint_every=None):
         """
         generate nodes for the tree based on the supplied data
+        data (list of Datums): training points
+        check_data (bool): whether to validate that the training data matches the top node/s of the tree
+        validation_set (list of Datums): validation data used for during generation pruning (not compatible with nprocs > 1)
+        scale_uncertainties (bool): whether to automatically scale the uncertainties based on the validation_set
+        nprocs (int): number of processors to use during generation
+        checkpoint_every (int): write a checkpoint file every so many added nodes (note that with nprocs>1 this is only for the root process)
         """
         np.random.seed(0)
         self.check_subgraph_isomorphic()
-
+        
+        if nprocs > 1 and (validation_set or scale_uncertainties):
+            raise ValueError("Continuous postpruning tracking is not performant when running in parallel. To run in parallel specify validation_set=None and scale_uncertainties=False and after training (and regularization) use self.prune and self.scale_uncertainties")
+        
+        if nprocs > 1 and checkpoint_every is not None:
+            logging.warning("When running in parallel checkpointing is only done for the root process.")
+        
+        self.validation_set = validation_set
+        self.min_val_error = np.inf
         self.skip_nodes = []
-
+        self.active_procs = dict()
+        self.active_conns = dict()
+        self.active_proc_names = dict()
+        self.proc_nprocs = dict()
+        self.proc_Ndata = dict()
+        self.proc_max_nodes = dict()
+        self.proc_trees = dict()
+        
+        def _spawn_subtree_process(node, nprocs, subtree_max_nodes):
+            data = node.items
+            n = Node(node.group,items=[],rule=node.rule,parent=None,children=[],name=node.name,depth=node.depth)
+            if self.validation_set:
+                val_set_subtree = []
+                for d in self.validation_set: #only validate against validation set items that would evaluate on this subtree
+                    if d.mol.is_subgraph_isomorphic(n.group, generate_initial_map=True, save_order=True):
+                        val_set_subtree.append(d)
+            else:
+                val_set_subtree = None
+            queue = mp.Queue()
+            p = mp.Process(target=run_process,
+                           args=(type(self),node,data,val_set_subtree,nprocs,subtree_max_nodes,self.n_strucs_min,self.iter_max,self.iter_item_cap,
+               self.max_structures_to_generate_extensions,self.choose_extension_based_on_subsamples,self.r,self.r_bonds,self.r_un,self.r_site,self.r_morph,
+               self.r_ncoord,self.r_lone_pairs,self.uncertainty_prepruning,self.reverse_extension_generation_allowed,queue))
+            p.start()
+            return queue,p
+        
         if check_data:
             for datum in data:
-                if not datum.mol.is_subgraph_isomorphic(
-                    self.root.group, generate_initial_map=True, save_order=True
-                ):
-                    logging.info("Datum did not match Root node:")
-                    logging.info(datum.mol.to_adjacency_list())
-                    raise ValueError
+                if self.root.group:
+                    if not datum.mol.is_subgraph_isomorphic(
+                        self.root.group, generate_initial_map=True, save_order=True
+                    ):
+                        logging.info("Datum did not match Root node:")
+                        logging.info(datum.mol.to_adjacency_list())
+                        raise ValueError
+                else:
+                    for n in self.root.children:
+                        if datum.mol.is_subgraph_isomorphic(n.group, generate_initial_map=True, save_order=True):
+                            break
+                    else:
+                        logging.info("Datum did not match Root node:")
+                        logging.info(datum.mol.to_adjacency_list())
+                        raise ValueError
         
         self.root.items = data[:]
         
+        N_data_main = len(data)
+        
+        self.fit_node(self.root,skip_val=True)
+        
         if len(self.nodes) > 1:
             self.descend_training_from_top()
+        
+        for node in self.nodes.values():
+            if node != self.root and node.rule is None:
+                self.fit_node(node, skip_val=True)
                 
+        if checkpoint_every is not None and self.root.name == "Root":
+            next_checkpoint = checkpoint_every
+            last_checkpoint_file = None
+
         node = self.select_node()
         logging.info(node)
         while True:
-            if len(self.nodes) > self.max_nodes:
+            if len(self.active_procs) > 0:
+                remove_names = []
+                for name in self.active_procs.keys():  # check if any processes have finished
+                    if self.active_conns[name].empty():
+                        continue
+                    else:
+                        new_nodes = self.active_conns[name].get()
+                    logging.error("merging back in process associated with node {0} to {1}".format(name,self.root.name))
+                    logging.error("main tree has {} nodes".format(len(self.nodes)))
+                    logging.error("subtree has {} nodes".format(len(new_nodes)))
+                    self.active_procs[name].terminate()
+                    n = new_nodes[name]
+                    n.parent = self.nodes[name].parent
+                    n.children = self.nodes[name].children + n.children
+                    for child in n.children:
+                        child.parent = n
+                    ind = self.nodes[name].parent.children.index(self.nodes[name])
+                    self.nodes[name].parent.children[ind] = n
+                    self.nodes = {**self.nodes,**new_nodes} #node started taken from new_nodes
+                    logging.error("after merge have {} nodes".format(len(self.nodes)))
+                    self.skip_nodes.remove(name)
+                    remove_names.append(name)
+                remove_names.reverse()
+                for name in remove_names:  # remove finished process objects
+                    nprocs += self.proc_nprocs[name]
+                    self.max_nodes += self.proc_max_nodes[name]
+                    N_data_main += self.proc_Ndata[name]
+                    del self.active_procs[name]
+                    del self.active_conns[name]
+                    del self.proc_nprocs[name]
+                    del self.proc_Ndata[name]
+                    del self.proc_max_nodes[name]
+                
+            if len(self.nodes) > self.max_nodes and len(self.active_procs) == 0:
                 break
-            if not node:
+            
+            if self.root.name == "Root" and checkpoint_every is not None and len(self.nodes) > next_checkpoint:
+                logging.info("Writing checkpoing at {} nodes".format(len(self.nodes)))
+                checkpoint_nodes = {k:{"group":n.group,"rule":n.rule,"parent":n.parent.name if n.parent else None,"children":[x.name for x in n.children],"name":n.name,"depth":n.depth} for k,n in self.nodes.items()}
+                checkpoint_file = "sidt_checkpoint_{}_nodes.pkl".format(len(self.nodes))
+                with open(checkpoint_file,'wb') as f:
+                    pickle.dump(checkpoint_nodes,f)
+                if last_checkpoint_file:
+                    os.remove(last_checkpoint_file)
+                last_checkpoint_file = checkpoint_file
+                next_checkpoint += checkpoint_every
+            
+            if not node and len(self.active_procs) == 0:
                 logging.info("Did not find any nodes to expand")
                 break
-            else:
-                self.extend_tree_from_node(node)
+            elif node:
+                sub_nprocs = np.floor(nprocs*len(node.items)/N_data_main)
+                if sub_nprocs >= nprocs:
+                    sub_nprocs -= 1
+                if node != self.root and len(self.nodes) > 1 and nprocs != 1 and len(node.items) > 20 and sub_nprocs > 1:
+                    logging.error("launching subprocess with sub_nprocs: {}".format(sub_nprocs))
+                    logging.error("subprocess is launched on node.items: {}".format(len(node.items)))
+                    subtree_max_nodes = np.floor(len(node.items)/N_data_main*(self.max_nodes-len(self.nodes)))
+                    logging.error("splitting off on node {0} from {1} with {2} nprocs and {3} max_nodes".format(node.name,self.root.name,sub_nprocs,subtree_max_nodes))
+                    self.max_nodes -= subtree_max_nodes
+                    nprocs -= sub_nprocs
+                    N_data_main -= len(node.items)
+                    logging.error("decremented max_nodes: {0} nprocs: {1}".format(self.max_nodes,nprocs))
+                    assert nprocs >= 1
+                    queue, p = _spawn_subtree_process(node, nprocs, subtree_max_nodes)
+                    self.active_procs[node.name] = p
+                    self.active_conns[node.name] = queue #parent_conn
+                    self.proc_nprocs[node.name] = sub_nprocs
+                    self.proc_max_nodes[node.name] = subtree_max_nodes
+                    self.proc_Ndata[node.name] = len(node.items)
+                    self.skip_nodes.append(node.name)
+                else:
+                    self.extend_tree_from_node(node)
+            
             node = self.select_node()
+
+        if self.validation_set:
+            logging.info("Postpruning based on best validation error to: {} MAE".format(self.min_val_error))
+            nodes_to_remove = []
+            for k in list(self.nodes.keys()):
+                if k not in self.best_tree_nodes:
+                    nodes_to_remove.append(k)
+
+            node_back_mapping = dict()
+            for k in nodes_to_remove:
+                parent = self.nodes[k]
+                while parent.name in nodes_to_remove:
+                    parent = parent.parent
+                node_back_mapping[self.nodes[k]] = parent
+                parent.items.extend(self.nodes[k].items)
+                del self.nodes[k]
+
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
         
         if scale_uncertainties:
             self.scale_uncertainties(validation_set=validation_set)
-        
-    def fit_tree(self, data=None):
-        """
-        fit rule for each node
-        """
-        if data:
-            self.clear_data()
-            self.root.items = data[:]
-            self.descend_training_from_top(only_specific_match=False)
-
-        for node in self.nodes.values():
-            if not node.items:
-                logging.warning(f"Node: {node.name} was empty")
-                node.rule = None 
-                continue
-            
-
-            node_data = [d.value for d in node.items]
-            n = len(node_data)
-            wsum = sum(d.weight for d in node.items)
-            wsq_sum = sum(d.weight**2 for d in node.items)
-            if (wsum - wsq_sum/wsum) > 1e-3: 
-                data_mean = sum(d.value * d.weight for d in node.items) / wsum
-                data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
-            else: #primarily if weights are all 1.0
-                data_mean = np.mean(node_data)
-                data_var = np.var(node_data)
-            
-            if n == 1:
-                node.rule = Rule(value=data_mean, uncertainty=None, num_data=n)
-            else:    
-                node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
-        
-        for node in self.nodes.values():
-            n = node
-            while n.rule is None:
-                n = n.parent
-            node.rule = n.rule
-            if node.rule.uncertainty is None:
-                node.rule.uncertainty = node.parent.rule.uncertainty
 
     def evaluate(self, mol, trace=False, estimate_uncertainty=False):
         """
@@ -559,7 +745,86 @@ class SubgraphIsomorphicDecisionTree:
             self.r_un if not self.r_un or not isinstance(self.r_un[0],list) else sum(self.r_un,[]),
             self.r_site if not self.r_site or not isinstance(self.r_site[0],list) else sum(self.r_site,[]),
             self.r_morph if not self.r_morph or not isinstance(self.r_morph[0],list) else sum(self.r_morph,[]),
+            self.r_ncoord if self.r_ncoord and not isinstance(self.r_ncoord[0],list) else sum(self.r_ncoord,[]),
+            self.r_lone_pairs if self.r_lone_pairs and not isinstance(self.r_lone_pairs[0],list) else sum(self.r_lone_pairs,[]),
         )
+    
+    def prune(self,validation_set,N=100):
+        """Prune nodes based on the validation error at a range of uncertainty cutoffs
+           nodes are cutoff based on the product of the estimated standard deviation of the rule and the number
+           of training points matching the node (including training points matching descendants)
+        Args:
+            validation_set (list of Datum objects): validation datums for pruning
+            N (int, optional): Number of uncertainty cutoffs to test. Defaults to 100.
+        """
+        unc_scales = np.array(sorted([np.sqrt(n.rule.uncertainty)*n.rule.num_data for n in self.nodes.values() if n.children]))
+        unc_xs = list(range(len(unc_scales)))
+        xs_evals = np.linspace(0,max(unc_xs),N)
+        uncertainty_cutoffs = np.interp(xs_evals,unc_xs,unc_scales)
+        
+        best_nodedict = {k: {"group": n.group, "rule": n.rule,"parent": n.parent.name if n.parent else None,
+                             "children": [x.name for x in n.children], "name": n.name, "depth": n.depth} for k,n in self.nodes.items()}
+        
+        best_val_error = np.mean(np.abs([self.evaluate(d.mol) - d.value for d in validation_set]))
+        logging.info("Initial Validation Error: {} MAE".format(best_val_error))
+        for uncertainty_cutoff in uncertainty_cutoffs:
+            logging.info("Running uncertainty_cutoff: {}".format(uncertainty_cutoff))
+            nodes_to_check = self.root.children #start with root children
+            nodes_to_remove = []
+            while len(nodes_to_check) > 0:
+                new_nodes_to_check = []
+                for n in nodes_to_check:
+                    if n.name not in nodes_to_remove:
+                        derror =  np.sqrt(n.rule.uncertainty)*n.rule.num_data
+                        if derror < uncertainty_cutoff:
+                            nodes_to_remove.extend([child.name for child in n.children])
+                        else:
+                            new_nodes_to_check.extend(n.children)
+                nodes_to_check = new_nodes_to_check
+
+            while nodes_to_remove:
+                new_nodes_to_remove = []
+                for k in nodes_to_remove:
+                    new_nodes_to_remove.extend([x.name for x in self.nodes[k].children])
+                    del self.nodes[k]
+                nodes_to_remove = new_nodes_to_remove
+                
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
+            
+            logging.info("Node Number: {}".format(len(self.nodes)))
+            val_error = np.mean(np.abs([self.evaluate(d.mol) - d.value for d in validation_set]))
+            logging.info("Validation Error on error_diff: {} MAE".format(val_error))
+            if val_error < best_val_error:
+                logging.info("Validation Error is best so far")
+                best_nodedict = {k: {"group": n.group, "rule": n.rule,"parent": n.parent.name if n.parent else None,
+                             "children": [x.name for x in n.children], "name": n.name, "depth": n.depth} for k,n in self.nodes.items()}
+                best_val_error = val_error
+
+        logging.info("Pruned to Validation MAE of {0} and {1} nodes".format(best_val_error,len(best_nodedict)))
+        nodes = dict()
+        for n, d in best_nodedict.items():
+            nodes[n] = Node(
+                group=d['group'],
+                rule=d["rule"],
+                parent=d["parent"],
+                children=d["children"],
+                name=d["name"],
+                depth=d["depth"],
+            )
+            
+        for n, node in nodes.items():
+            if node.parent:
+                node.parent = nodes[node.parent]
+            node.children = [nodes[child] for child in node.children]
+
+        self.nodes = nodes
+        self.root = self.nodes["Root"]
     
     def scale_uncertainties(self,validation_set=None):
         """
@@ -599,6 +864,31 @@ class SubgraphIsomorphicDecisionTree:
         self.node_uncertainties.update({name: self.node_uncertainties[name] * optimized_scaling_factor**2 for i, name in enumerate(self.nodes)})
         for i, node in enumerate(self.nodes.keys()):
             self.nodes[node].rule.uncertainty = self.node_uncertainties[node]
+
+def run_process(constructor,node,data,validation_set,nprocs,subtree_max_nodes,n_strucs_min,iter_max,iter_item_cap,
+               max_structures_to_generate_extensions,choose_extension_based_on_subsamples,r,r_bonds,r_un,r_site,r_morph,
+               r_ncoord,r_lone_pairs,uncertainty_prepruning,reverse_extension_generation_allowed,queue):
+    subtree = constructor(
+            nodes={node.name:node},
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
+            uncertainty_prepruning=uncertainty_prepruning,
+            max_nodes=subtree_max_nodes,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+        )
+    subtree.root = node
+    subtree.generate_tree(data,validation_set=validation_set,scale_uncertainties=False,nprocs=nprocs)
+    queue.put(subtree.nodes)
 
 def to_dict(obj):
     out_dict = dict()
@@ -776,6 +1066,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_un=None,
         r_site=None,
         r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
         uncertainty_prepruning=False,
         weigh_node_selection_by_occurrence=True,
         reverse_extension_generation_allowed=True,
@@ -791,6 +1083,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_site = []
         if r_morph is None:
             r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
 
         super().__init__(
             root_group=root_group,
@@ -806,14 +1102,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
             uncertainty_prepruning=uncertainty_prepruning,
             reverse_extension_generation_allowed=reverse_extension_generation_allowed,
             max_ring_gen_size=max_ring_gen_size,
+            weigh_node_selection_by_occurrence=weigh_node_selection_by_occurrence,
         )
 
-        
         self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
-        self.weigh_node_selection_by_occurrence = weigh_node_selection_by_occurrence
         self.decomposition = decomposition
         self.mol_submol_node_maps = None
         self.data_delta = None
@@ -1498,6 +1795,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         r_un=None,
         r_site=None,
         r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
         fract_threshold_to_predict_true=0.5,
         reverse_extension_generation_allowed=True,
         max_ring_gen_size=None,
@@ -1512,6 +1811,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             r_site = []
         if r_morph is None:
             r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
 
         super().__init__(
             decomposition=decomposition,
@@ -1529,6 +1832,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
             reverse_extension_generation_allowed=reverse_extension_generation_allowed,
             max_ring_gen_size=max_ring_gen_size,
             )
