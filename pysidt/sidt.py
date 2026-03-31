@@ -501,6 +501,12 @@ class SubgraphIsomorphicDecisionTree:
     def generate_tree(self, data, check_data=True, validation_set=None, scale_uncertainties=False, nprocs=1, checkpoint_every=None):
         """
         generate nodes for the tree based on the supplied data
+        data (list of Datums): training points
+        check_data (bool): whether to validate that the training data matches the top node/s of the tree
+        validation_set (list of Datums): validation data used for during generation pruning (not compatible with nprocs > 1)
+        scale_uncertainties (bool): whether to automatically scale the uncertainties based on the validation_set
+        nprocs (int): number of processors to use during generation
+        checkpoint_every (int): write a checkpoint file every so many added nodes (note that with nprocs>1 this is only for the root process)
         """
         np.random.seed(0)
         self.check_subgraph_isomorphic()
