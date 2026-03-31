@@ -104,6 +104,7 @@ class SubgraphIsomorphicDecisionTree:
         `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
         `r_site`: surface sites to generate extensions. If None, [] will be used.
         `r_morph`: surface morphology to generate extensions. If None, [] will be used.
+        `r_ncoord`: atom coordination numbers to generate extensions. if None ignored.
     """
     def __init__(
         self,
