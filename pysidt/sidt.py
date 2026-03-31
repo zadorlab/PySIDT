@@ -102,6 +102,7 @@ class SubgraphIsomorphicDecisionTree:
         `r`: atom types to generate extensions. If None, all atom types will be used.
         `r_bonds`: bond types to generate extensions. If None, [1, 2, 3, 1.5, 4] will be used.
         `r_un`: unpaired electrons to generate extensions. If None, [0, 1, 2, 3] will be used.
+        `r_lone_pairs`: pairs of electrons to generate extensions. If None ignored.
         `r_site`: surface sites to generate extensions. If None, [] will be used.
         `r_morph`: surface morphology to generate extensions. If None, [] will be used.
         `r_ncoord`: atom coordination numbers to generate extensions. if None ignored.
@@ -123,6 +124,7 @@ class SubgraphIsomorphicDecisionTree:
         r_morph=None,
         r_ncoord=None,
         r_label=None,
+        r_lone_pairs=None,
         uncertainty_prepruning=False,
         max_nodes=np.inf,
         reverse_extension_generation_allowed=True,
@@ -146,6 +148,8 @@ class SubgraphIsomorphicDecisionTree:
             r_ncoord = []
         if r_label is None:
             r_label = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
         self.nodes = nodes
         self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
@@ -157,6 +161,7 @@ class SubgraphIsomorphicDecisionTree:
         self.r_morph = r_morph
         self.r_ncoord = r_ncoord
         self.r_label = r_label
+        self.r_lone_pairs = r_lone_pairs
         self.max_ring_gen_size = max_ring_gen_size
         self.skip_nodes = []
         self.uncertainty_prepruning = uncertainty_prepruning
@@ -340,6 +345,7 @@ class SubgraphIsomorphicDecisionTree:
             r_morph=self.r_morph,
             r_ncoord=self.r_ncoord,
             r_label=self.r_label,
+            r_lone_pairs=self.r_lone_pairs,
             iter_max=self.iter_max,
             iter_item_cap=self.iter_item_cap,
             just_reg_dim=just_reg_dim,
@@ -542,7 +548,7 @@ class SubgraphIsomorphicDecisionTree:
             p = mp.Process(target=run_process,
                            args=(type(self),node,data,val_set_subtree,nprocs,subtree_max_nodes,self.n_strucs_min,self.iter_max,self.iter_item_cap,
                self.max_structures_to_generate_extensions,self.choose_extension_based_on_subsamples,self.r,self.r_bonds,self.r_un,self.r_site,self.r_morph,
-               self.r_ncoord,self.uncertainty_prepruning,self.reverse_extension_generation_allowed,queue))
+               self.r_ncoord,self.r_lone_pairs,self.uncertainty_prepruning,self.reverse_extension_generation_allowed,queue))
             p.start()
             return queue,p
         
@@ -740,6 +746,7 @@ class SubgraphIsomorphicDecisionTree:
             self.r_site if not self.r_site or not isinstance(self.r_site[0],list) else sum(self.r_site,[]),
             self.r_morph if not self.r_morph or not isinstance(self.r_morph[0],list) else sum(self.r_morph,[]),
             self.r_ncoord if self.r_ncoord and not isinstance(self.r_ncoord[0],list) else sum(self.r_ncoord,[]),
+            self.r_lone_pairs if self.r_lone_pairs and not isinstance(self.r_lone_pairs[0],list) else sum(self.r_lone_pairs,[]),
         )
     
     def prune(self,validation_set,N=100):
@@ -860,7 +867,7 @@ class SubgraphIsomorphicDecisionTree:
 
 def run_process(constructor,node,data,validation_set,nprocs,subtree_max_nodes,n_strucs_min,iter_max,iter_item_cap,
                max_structures_to_generate_extensions,choose_extension_based_on_subsamples,r,r_bonds,r_un,r_site,r_morph,
-               r_ncoord,uncertainty_prepruning,reverse_extension_generation_allowed,queue):
+               r_ncoord,r_lone_pairs,uncertainty_prepruning,reverse_extension_generation_allowed,queue):
     subtree = constructor(
             nodes={node.name:node},
             n_strucs_min=n_strucs_min,
@@ -874,6 +881,7 @@ def run_process(constructor,node,data,validation_set,nprocs,subtree_max_nodes,n_
             r_site=r_site,
             r_morph=r_morph,
             r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
             uncertainty_prepruning=uncertainty_prepruning,
             max_nodes=subtree_max_nodes,
             reverse_extension_generation_allowed=reverse_extension_generation_allowed,
@@ -1058,6 +1066,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         r_un=None,
         r_site=None,
         r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
         uncertainty_prepruning=False,
         weigh_node_selection_by_occurrence=True,
         reverse_extension_generation_allowed=True,
@@ -1073,6 +1083,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_site = []
         if r_morph is None:
             r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
 
         super().__init__(
             root_group=root_group,
@@ -1088,6 +1102,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
             uncertainty_prepruning=uncertainty_prepruning,
             reverse_extension_generation_allowed=reverse_extension_generation_allowed,
             max_ring_gen_size=max_ring_gen_size,
@@ -1779,6 +1795,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
         r_un=None,
         r_site=None,
         r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
         fract_threshold_to_predict_true=0.5,
         reverse_extension_generation_allowed=True,
         max_ring_gen_size=None,
@@ -1793,6 +1811,10 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             r_site = []
         if r_morph is None:
             r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
 
         super().__init__(
             decomposition=decomposition,
@@ -1810,6 +1832,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             r_un=r_un,
             r_site=r_site,
             r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
             reverse_extension_generation_allowed=reverse_extension_generation_allowed,
             max_ring_gen_size=max_ring_gen_size,
             )
