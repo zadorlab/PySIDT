@@ -743,6 +743,13 @@ class SubgraphIsomorphicDecisionTree:
         )
     
     def prune(self,validation_set,N=100):
+        """Prune nodes based on the validation error at a range of uncertainty cutoffs
+           nodes are cutoff based on the product of the estimated standard deviation of the rule and the number
+           of training points matching the node (including training points matching descendants)
+        Args:
+            validation_set (list of Datum objects): validation datums for pruning
+            N (int, optional): Number of uncertainty cutoffs to test. Defaults to 100.
+        """
         unc_scales = np.array(sorted([np.sqrt(n.rule.uncertainty)*n.rule.num_data for n in self.nodes.values() if n.children]))
         unc_xs = list(range(len(unc_scales)))
         xs_evals = np.linspace(0,max(unc_xs),N)
