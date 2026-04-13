@@ -1407,27 +1407,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         logging.info("# nodes: {}".format(len(self.nodes)))
 
     def estimate_uncertainty(self,rel_node_dof_tolerance=1e-5):
-        nodes = [node for node in self.nodes.values()]
+        max_depth = max([node.depth for node in self.nodes.values()])
+        nodes = sum([self.cached_nodes_depth_dict[depth] for depth in range(max_depth+1)],[])
 
-        weights = self.weights
         W = self.W
 
         # generate matrix
-        A = sp.csc_matrix((len(self.datums), len(nodes)))
-        y = np.array([datum.value for datum in self.datums])
-        preds = np.zeros(len(self.datums))
+        A = sp.block_array([[self.cached_A_depth_dict[depth] for depth in range(max_depth+1)]],format='csc')
 
-        for i, datum in enumerate(self.datums):
-            for node in self.mol_node_maps[datum]["nodes"]:
-                while node is not None:
-                    if node in nodes:
-                        j = nodes.index(node)
-                        A[i, j] += 1.0
-                        preds[i] += node.rule.value
-                    node = node.parent
-
-        self.data_delta = preds - y
-        rules = [n.rule.value for n in self.nodes.values()]
+        rules = [n.rule.value for n in nodes]
         rule_mean = abs(np.mean(rules))
         atol = rule_mean*rel_node_dof_tolerance
         self.abs_node_dof_tolerance = atol
