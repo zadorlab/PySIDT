@@ -1125,6 +1125,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.weights = None #weight list for weighted least squares
         self.validation_set = None
         self.test_set = None
+        self.cached_A_depth_dict = dict()
+        self.cached_pred_depth_dict = dict()
+        self.cached_nodes_depth_dict = dict()
 
     def decompose(self,struct):
         if isinstance(self.decomposition,list):
@@ -1331,34 +1334,46 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         weights = self.weights
         W = self.W
 
+        unchanged = False
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
-
-            # generate matrix
-            A = sp.lil_matrix((len(self.datums), len(nodes)))
-            y -= preds
-
-            for i, datum in enumerate(self.datums):
-                for node in self.mol_node_maps[datum]["nodes"]:
-                    while node is not None:
-                        if node in nodes:
-                            j = nodes.index(node)
-                            A[i, j] += 1.0
-                        node = node.parent
-
-            clf = linear_model.Lasso(
-                alpha=alpha,
-                fit_intercept=False,
-                tol=1e-4,
-                max_iter=1000000000,
-                selection="random",
-            )
-            if weights is not None:
-                lasso = clf.fit(A, y, sample_weight=weights)
-            else:
-                lasso = clf.fit(A, y)
+            unchanged = unchanged and all(n.rule is not None for n in nodes)
             
-            preds = A * clf.coef_
+            y -= preds
+            
+            if not unchanged:
+                # generate matrix
+                A = sp.lil_matrix((len(self.datums), len(nodes)))
+                
+                for i, datum in enumerate(self.datums):
+                    for node in self.mol_node_maps[datum]["nodes"]:
+                        while node is not None:
+                            if node in nodes:
+                                j = nodes.index(node)
+                                A[i, j] += 1.0
+                            node = node.parent
+
+                self.cached_A_depth_dict[depth] = A
+                self.cached_nodes_depth_dict[depth] = nodes
+                
+                clf = linear_model.Lasso(
+                    alpha=alpha,
+                    fit_intercept=False,
+                    tol=1e-4,
+                    max_iter=1000000000,
+                    selection="random",
+                )
+                if weights is not None:
+                    lasso = clf.fit(A, y, sample_weight=weights)
+                else:
+                    lasso = clf.fit(A, y)
+                    
+            
+                preds = A * clf.coef_
+                self.cached_pred_depth_dict[depth] = preds
+            else:
+                preds = self.cached_pred_depth_dict[depth]
+            
             self.data_delta = preds - y
 
             for i, val in enumerate(clf.coef_):
