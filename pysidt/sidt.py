@@ -36,7 +36,7 @@ class Rule:
         self.comment = comment 
         
     def __repr__(self) -> str:
-        if self.uncertainty:
+        if self.uncertainty is not None:
             return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data}, comment={self.comment})"
         else:
             return f"{self.value} (N={self.num_data}, comment={self.comment})"
