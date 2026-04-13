@@ -1254,6 +1254,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if len(self.nodes) > 1:
             self.descend_training_from_top(only_specific_match=True)
         
+        if alpha is None:
+            alpha = 1e-6 * np.mean(np.abs([d.value for d in data]))
+            logging.info("automatically selecting alpha={}".format(alpha))
+            
         self.val_mae = np.inf
         self.skip_nodes = []
         self.new_nodes = []
@@ -1313,7 +1317,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if scale_uncertainties:
             self.scale_uncertainties()
          
-    def fit_tree(self, data=None, check_data=True, alpha=None):
+    def fit_tree(self, alpha, data=None, check_data=True):
         """
         fit rule for each node
         """
@@ -1326,12 +1330,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.estimate_uncertainty()
         
 
-    def fit_rule(self, alpha=None):
+    def fit_rule(self, alpha):
         max_depth = max([node.depth for node in self.nodes.values()])
         y = np.array([datum.value for datum in self.datums])
-        
-        if alpha is None:
-            alpha = 1e-6 * np.mean(np.abs(y))
             
         preds = np.zeros(len(self.datums))
         self.node_uncertainties = dict()
