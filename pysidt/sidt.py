@@ -89,7 +89,7 @@ class Datum:
 
 class SubgraphIsomorphicDecisionTree:
     """
-    Makes prediction for a molecule based on multiple evaluations.
+    Makes prediction for a molecule based on one evaluation. 
 
     Args:
         `root_group`: root group for the tree
