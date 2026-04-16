@@ -1043,6 +1043,316 @@ def read_nodes(file, class_dict=None):
 
     return nodes
 
+class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
+    """target_weights,
+    class for Multi-target single-evaluation SIDTs
+    """
+    def __init__(
+        self,
+        target_weights,
+        root_group=None,
+        nodes=None,
+        initial_root_splits=None,
+        n_strucs_min=1,
+        iter_max=2,
+        iter_item_cap=100,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
+        fract_nodes_expand_per_iter=0,
+        r=None,
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
+        max_nodes=np.inf,
+        uncertainty_prepruning=False,
+        weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
+    ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
+
+        super().__init__(
+            root_group=root_group,
+            nodes=nodes,
+            initial_root_splits=initial_root_splits,
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
+            uncertainty_prepruning=uncertainty_prepruning,
+            max_nodes=max_nodes,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+            max_ring_gen_size=max_ring_gen_size,
+            weigh_node_selection_by_occurrence=weigh_node_selection_by_occurrence,
+        )
+
+        self.target_num = len(target_weights)
+        self.target_weights = target_weights
+        
+    def select_node(self):
+        """
+        Picks the nodes with the largest magintude rule values
+        """
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes
+            ]
+        else:
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes]
+
+        if len(selectable_nodes) > 0:
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    np.dot(node.rule.uncertainty,self.target_weights) * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    np.dot(node.rule.uncertainty,self.target_weights)
+                    if len(node.items) > 1
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            inds = np.argsort(rulevals)
+            nodes = [
+                selectable_nodes[ind] for ind in inds if len(selectable_nodes[ind].items) > 1 and not np.isnan(rulevals[ind])
+            ]
+            if len(nodes) == 0:
+                return None
+            node = nodes[-1]
+            return node
+        else:
+            return None
+
+    def fit_node(self, node, skip_val=False):
+        if not node.items:
+            logging.warning(f"Node: {node.name} was empty")
+            node.rule = None 
+            return
+        
+        node_data = [d.value for d in node.items]
+        n = len(node_data)
+        wsum = sum(d.weight for d in node.items)
+        wsq_sum = sum(d.weight**2 for d in node.items)
+        if (wsum - wsq_sum/wsum) > 1e-3: 
+            data_mean = sum(d.value * d.weight for d in node.items) / wsum
+            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+        else: #primarily if weights are all 1.0
+            data_mean = np.mean(node_data)
+            data_var = np.var(node_data)
+        
+        if n == 1:
+            node.rule = Rule(value=node_data[0], uncertainty=None, num_data=n)
+        else:    
+            node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
+
+        n = node
+        while n.rule is None:
+            n = n.parent
+        node.rule = n.rule
+        if node.rule.uncertainty is None:
+            node.rule.uncertainty = node.parent.rule.uncertainty
+
+        assert not isinstance(node.rule.value,float), (node.name,node_data)
+        if not skip_val and self.validation_set:
+            val_error = [np.dot(self.evaluate(d.mol) - d.value, self.target_weights) for d in self.validation_set]
+            val_mae = np.mean(np.abs(np.array(val_error)))
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
+                self.best_tree_nodes = list(self.nodes.keys())
+            self.val_mae = val_mae
+            logging.info("Root: {0}  Nodes: {1}".format(self.root.name,len(self.nodes)))
+            logging.info("validation MAE: {}".format(self.val_mae))
+
+    def choose_extension(self, node, exts):
+        """
+        select best extension among the set of extensions
+        returns a Node object
+        almost always subclassed
+        """
+        logging.info(f"Choosing from {len(exts)} extensions")
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
+        minval = np.inf
+        minext = None
+        for ext in exts:
+            new, comp = split_mols(structs, ext)
+            Lnew = len(new)
+            Lcomp = len(comp)
+            if Lnew  > 1 and Lcomp > 1:
+                val = np.std([np.dot(x.value,self.target_weights) for x in new]) * Lnew  + np.std(
+                [np.dot(x.value,self.target_weights) for x in comp]
+            ) * Lcomp
+            elif Lnew  == 1 and Lcomp == 1:
+                val = 0.0
+            elif Lnew  == 1:
+                val = np.std([np.dot(x.value,self.target_weights) for x in comp]) * Lcomp
+            elif Lcomp == 1:
+                val = np.std([np.dot(x.value,self.target_weights) for x in new]) * Lnew 
+            else: #did not split?
+                logging.error("group:")
+                logging.error(ext.to_adjacency_list())
+                logging.error("data:")
+                for item in node.items:
+                    logging.error(item.mol.to_adjacency_list())
+                raise ValueError("Generated extension did not split items")
+
+            if val < minval:
+                minval = val
+                minext = ext
+
+        return minext
+
+    #haven't adapted past here...
+    def prune(self,validation_set,N=100):
+        """Prune nodes based on the validation error at a range of uncertainty cutoffs
+           nodes are cutoff based on the product of the estimated standard deviation of the rule and the number
+           of training points matching the node (including training points matching descendants)
+        Args:
+            validation_set (list of Datum objects): validation datums for pruning
+            N (int, optional): Number of uncertainty cutoffs to test. Defaults to 100.
+        """
+        unc_scales = np.array(sorted([np.dot(np.sqrt(n.rule.uncertainty),self.target_weights)*n.rule.num_data for n in self.nodes.values() if n.children]))
+        unc_xs = list(range(len(unc_scales)))
+        xs_evals = np.linspace(0,max(unc_xs),N)
+        uncertainty_cutoffs = np.interp(xs_evals,unc_xs,unc_scales)
+        
+        best_nodedict = {k: {"group": n.group, "rule": n.rule,"parent": n.parent.name if n.parent else None,
+                             "children": [x.name for x in n.children], "name": n.name, "depth": n.depth} for k,n in self.nodes.items()}
+        
+        best_val_error = np.mean(np.abs([self.evaluate(d.mol) - d.value for d in validation_set]))
+        logging.info("Initial Validation Error: {} MAE".format(best_val_error))
+        for uncertainty_cutoff in uncertainty_cutoffs:
+            logging.info("Running uncertainty_cutoff: {}".format(uncertainty_cutoff))
+            nodes_to_check = self.root.children #start with root children
+            nodes_to_remove = []
+            while len(nodes_to_check) > 0:
+                new_nodes_to_check = []
+                for n in nodes_to_check:
+                    if n.name not in nodes_to_remove:
+                        derror =  np.dot(np.sqrt(n.rule.uncertainty),self.target_weights)*n.rule.num_data
+                        if derror < uncertainty_cutoff:
+                            nodes_to_remove.extend([child.name for child in n.children])
+                        else:
+                            new_nodes_to_check.extend(n.children)
+                nodes_to_check = new_nodes_to_check
+
+            while nodes_to_remove:
+                new_nodes_to_remove = []
+                for k in nodes_to_remove:
+                    new_nodes_to_remove.extend([x.name for x in self.nodes[k].children])
+                    del self.nodes[k]
+                nodes_to_remove = new_nodes_to_remove
+                
+            for node in self.nodes.values():
+                children_to_remove = []
+                for child in node.children:
+                    if child not in self.nodes.values():
+                        children_to_remove.append(child)
+                for child in children_to_remove:
+                    node.children.remove(child)
+            
+            logging.info("Node Number: {}".format(len(self.nodes)))
+            val_error = np.mean(np.abs([self.evaluate(d.mol) - d.value for d in validation_set]))
+            logging.info("Validation Error on error_diff: {} MAE".format(val_error))
+            if val_error < best_val_error:
+                logging.info("Validation Error is best so far")
+                best_nodedict = {k: {"group": n.group, "rule": n.rule,"parent": n.parent.name if n.parent else None,
+                             "children": [x.name for x in n.children], "name": n.name, "depth": n.depth} for k,n in self.nodes.items()}
+                best_val_error = val_error
+
+        logging.info("Pruned to Validation MAE of {0} and {1} nodes".format(best_val_error,len(best_nodedict)))
+        nodes = dict()
+        for n, d in best_nodedict.items():
+            nodes[n] = Node(
+                group=d['group'],
+                rule=d["rule"],
+                parent=d["parent"],
+                children=d["children"],
+                name=d["name"],
+                depth=d["depth"],
+            )
+            
+        for n, node in nodes.items():
+            if node.parent:
+                node.parent = nodes[node.parent]
+            node.children = [nodes[child] for child in node.children]
+
+        self.nodes = nodes
+        self.root = self.nodes["Root"]
+
+    def scale_uncertainties(self,validation_set=None):
+        """
+        rescales uncertainty predictions by a constant to better match validation errors
+        """
+        if validation_set is not None:
+            self.validation_set = validation_set
+        
+        assert self.validation_set is not None
+        
+        if self.node_uncertainties is None:
+            self.node_uncertainties = {node.name: node.rule.uncertainty for node in self.nodes.values()}
+        
+        val_predictions_uncertainties = [self.evaluate(d.mol, estimate_uncertainty=True) for d in self.validation_set]
+        val_predictions = [pred_unc[0] for pred_unc in val_predictions_uncertainties]
+        val_uncertainties = [pred_unc[1] for pred_unc in val_predictions_uncertainties]
+        val_error = [val_predictions[i] - self.validation_set[i].value for i in range(len(self.validation_set))]
+        initial_scaling_factor = 1.0
+        
+        def get_bounded_fraction(errs, uncs, confidence_level):
+            t = scipy.stats.norm.ppf((1 + confidence_level) / 2)
+            return np.sum(uncs * t >= np.abs(errs)) / len(errs)
+
+        def get_calibration_curve(errs, uncs, n=50):
+            confidence_levels = np.linspace(0, 1, n)
+            proportion_correct = [get_bounded_fraction(errs, uncs, confidence_level) for confidence_level in confidence_levels]
+            return confidence_levels, proportion_correct
+        
+        def objective_function(scaling_factor, errs, uncs, n = 500):
+            scaled_uncs = scaling_factor * uncs
+            confidence_levels, proportion_correct = get_calibration_curve(errs, scaled_uncs, n)
+            return np.nansum((proportion_correct - confidence_levels)**2)
+            
+        for target_ind in range(len(self.target_num)):
+            result = minimize(objective_function, initial_scaling_factor, args=(np.array([x[target_ind] for x in val_error]), np.array([x[target_ind] for x in val_uncertainties])), method="Nelder-Mead")
+            optimized_scaling_factor = result.x[0]
+            logging.info(f"Scaling Node Uncertainties by Optimized Scaling Factor {optimized_scaling_factor**2:.3f}")
+            for name,node in self.nodes.items():
+                self.node_uncertainties[name][target_ind] *= optimized_scaling_factor**2
+                self.nodes[name].rule.uncertainty[target_ind] = self.node_uncertainties[name][target_ind]
+            
+    
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     """
@@ -1241,7 +1551,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `validation_set`: list of Datum objects to validate the tree
             `max_nodes`: maximum number of nodes to generate
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
-            `alpha`: regularization parameter for Lasso regression
+            `alpha`: regularization parameter/s for Lasso regression (float if single target, dict mapping index to value if multi-target)
         """
         np.random.seed(0)
         logging.info("Checking starting tree is subgraph isomorphic")
@@ -1255,8 +1565,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.descend_training_from_top(only_specific_match=True)
         
         if alpha is None:
-            alpha = 1e-6 * np.mean(np.abs([d.value for d in data]))
-            logging.info("automatically selecting alpha={}".format(alpha))
+            if isinstance(data[0].value,(list, np.ndarray)):
+                alpha = dict()
+                for i in range(len(data[0].value)):
+                    alpha[i] = 1e-6 * np.nanmean(np.abs([d.value[i] for d in data]))
+                logging.info("automatically selecting alpha={}".format(alpha))
+            else:
+                alpha = 1e-6 * np.mean(np.abs([d.value for d in data]))
+                logging.info("automatically selecting alpha={}".format(alpha))
             
         self.val_mae = np.inf
         self.skip_nodes = []
@@ -1267,7 +1583,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         
         while True:
             logging.info("Fitting Tree")
-            self.fit_tree(alpha=alpha)
+            self.fit_tree(alpha=alpha,update_cache=False)
             if len(self.nodes) > max_nodes:
                 break
             self.new_nodes = []
@@ -1317,7 +1633,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if scale_uncertainties:
             self.scale_uncertainties()
          
-    def fit_tree(self, alpha, data=None, check_data=True):
+    def fit_tree(self, alpha, data=None, check_data=True, update_cache=True):
         """
         fit rule for each node
         """
@@ -1325,12 +1641,12 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.setup_data(data, check_data=check_data)
             self.descend_training_from_top(only_specific_match=True)
 
-        self.fit_rule(alpha=alpha)
+        self.fit_rule(alpha=alpha,update_cache=update_cache)
 
         self.estimate_uncertainty()
         
 
-    def fit_rule(self, alpha):
+    def fit_rule(self, alpha, update_cache=True):
         max_depth = max([node.depth for node in self.nodes.values()])
         y = np.array([datum.value for datum in self.datums])
             
@@ -1339,7 +1655,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         weights = self.weights
         W = self.W
 
-        unchanged = False
+        unchanged = not update_cache
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
             unchanged = unchanged and all(n.rule is not None for n in nodes)
@@ -1376,13 +1692,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             
                 preds = A * clf.coef_
                 self.cached_pred_depth_dict[depth] = preds
+                
+                for i, val in enumerate(clf.coef_):
+                    nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
+
             else:
                 preds = self.cached_pred_depth_dict[depth]
             
             self.data_delta = preds - y
-
-            for i, val in enumerate(clf.coef_):
-                nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
 
         train_error = self.data_delta
 
@@ -1762,6 +2079,348 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             return pred, tr
         else:
             return pred
+
+class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorphicDecisionTreeRegressor):
+    """
+    class for Multi-target Multi-evaluation SIDTs
+    """
+    def __init__(
+        self,
+        decomposition,
+        target_weights,
+        root_group=None,
+        nodes=None,
+        initial_root_splits=None,
+        n_strucs_min=1,
+        iter_max=2,
+        iter_item_cap=100,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
+        fract_nodes_expand_per_iter=0,
+        r=None,
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
+        uncertainty_prepruning=False,
+        weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
+    ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
+
+        super().__init__(
+            decomposition,
+            root_group=root_group,
+            nodes=nodes,
+            initial_root_splits=initial_root_splits,
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
+            uncertainty_prepruning=uncertainty_prepruning,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+            max_ring_gen_size=max_ring_gen_size,
+            weigh_node_selection_by_occurrence=weigh_node_selection_by_occurrence,
+        )
+        
+        self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
+        self.decomposition = decomposition
+        self.mol_submol_node_maps = None
+        self.data_delta = None
+        self.datums = None
+        self.validation_set = None
+        self.best_tree_nodes = None
+        self.best_rule_map = None
+        self.min_val_error = np.inf
+        self.uncertainties_valid = True
+        self.assign_depths()
+        self.W = None # weight matrix for weighted least squares
+        self.weights = None #weight list for weighted least squares
+        self.validation_set = None
+        self.test_set = None
+
+        self.target_num = len(target_weights)
+        self.target_weights = target_weights
+
+        self.cached_A_depth_dict = dict()
+        self.cached_pred_depth_target_dict = dict()
+        self.cached_nodes_depth_dict = dict()
+        
+    def fit_rule(self, alpha, update_cache=True):
+        max_depth = max([node.depth for node in self.nodes.values()])
+        ys = [np.array([datum.value[k] for datum in self.datums]) for k in range(self.target_num)]
+        preds = [np.zeros(len(self.datums)) for k in range(self.target_num)]
+        self.data_delta = np.zeros((len(self.datums),self.target_num))
+        self.node_uncertainties = dict()
+        weights = self.weights
+        W = self.W
+
+        unchanged = not update_cache
+        for depth in range(max_depth + 1):
+            nodes = [node for node in self.nodes.values() if node.depth == depth]
+            unchanged = unchanged and all(n.rule is not None for n in nodes)
+
+            if not unchanged:
+                A = sp.lil_matrix((len(self.datums), len(nodes)))
+                for i, datum in enumerate(self.datums):
+                    for node in self.mol_node_maps[datum]["nodes"]:
+                        while node is not None:
+                            if node in nodes:
+                                j = nodes.index(node)
+                                A[i, j] += 1.0
+                            node = node.parent
+
+                self.cached_A_depth_dict[depth] = A
+                self.cached_nodes_depth_dict[depth] = nodes
+            
+                            
+                for k in range(self.target_num):
+                    
+                    if isinstance(alpha,(int,float,np.float64)):
+                        a = alpha
+                    else:
+                        a = alpha[k]
+                        
+                    ys[k] -= preds[k]
+        
+                    clf = linear_model.Lasso(
+                        alpha=a,
+                        fit_intercept=False,
+                        tol=1e-4,
+                        max_iter=1000000000,
+                        selection="random",
+                    )
+                    if weights is not None:
+                        lasso = clf.fit(A, ys[k], sample_weight=weights)
+                    else:
+                        lasso = clf.fit(A, ys[k])
+                    
+                    preds[k] = A * clf.coef_
+                    
+                    self.cached_pred_depth_target_dict[(depth,k)] = preds[k]
+                    self.data_delta[:,k] = preds[k] - ys[k]
+        
+                    for i, val in enumerate(clf.coef_):
+                        if not nodes[i].rule:
+                            nodes[i].rule = Rule(value=np.zeros(self.target_num), num_data=np.sum(A[:, i]))
+                        nodes[i].rule.value[k] = val
+            else:
+                for k in range(self.target_num):
+                    ys[k] -= preds[k]
+                    preds[k] = self.cached_pred_depth_target_dict[(depth,k)]
+                    self.data_delta[:,k] = preds[k] - ys[k]
+        
+        logging.info("training MAE: {}".format(np.mean(np.abs(np.array(self.data_delta @ self.target_weights)))))
+
+        if self.validation_set:
+            val_error = [np.dot(self.evaluate(d.mol, estimate_uncertainty=False),self.target_weights) - np.dot(d.value,self.target_weights) for d in self.validation_set]
+            val_mae = np.mean(np.abs(np.array(val_error)))
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
+                self.best_tree_nodes = list(self.nodes.keys())
+                self.bestA = A
+                self.best_nodes = {k: v for k, v in self.nodes.items()}
+                self.best_mol_node_maps = {
+                    k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
+                    for k, v in self.mol_node_maps.items()
+                }
+                self.best_rule_map = {name:self.nodes[name].rule for name in self.best_tree_nodes}
+            self.val_mae = val_mae
+            logging.info("validation MAE: {}".format(self.val_mae))
+
+        if self.test_set:
+            test_error = [np.dot(self.evaluate(d.mol),self.target_weights) - np.dot(d.value,self.target_weights) for d in self.test_set]
+            test_mae = np.mean(np.abs(np.array(test_error)))
+            logging.info("test MAE: {}".format(test_mae))
+            
+        logging.info("# nodes: {}".format(len(self.nodes)))
+
+    def estimate_uncertainty(self,rel_node_dof_tolerance=1e-5):
+        max_depth = max([node.depth for node in self.nodes.values()])
+        nodes = sum([self.cached_nodes_depth_dict[depth] for depth in range(max_depth+1)],[])
+        self.node_uncertainties = {node.name: np.zeros(len(self.datums[0].value)) for node in nodes}
+
+        A = sp.block_array([[self.cached_A_depth_dict[depth] for depth in range(max_depth+1)]],format='csc')
+
+        weights = self.weights
+        W = self.W
+        
+        for m in range(self.target_num):
+            
+            # generate matrix
+            y = np.array([datum.value[m] for datum in self.datums])
+            pred = sum([self.cached_pred_depth_target_dict[(depth,m)] for depth in range(max_depth+1)])
+    
+            rules = [n.rule.value[m] for n in self.nodes.values()]
+            rule_mean = abs(np.mean(rules))
+            atol = rule_mean*rel_node_dof_tolerance
+            self.abs_node_dof_tolerance = atol
+            extra_dofs = len([n for n in rules if abs(n)<atol]) #count node rule values driven to zero by lasso
+            
+            if A.shape[1] != 1 and W is not None and len(self.datums) - len(nodes) + extra_dofs > 0:
+                node_uncertainties = (
+                    np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
+                    * (self.data_delta[:,m]**2).sum()
+                    / ((len(self.datums) - len(nodes) + extra_dofs))
+                )
+                for k,node in enumerate(nodes):
+                    self.node_uncertainties[node.name][m] = node_uncertainties[k]
+            elif A.shape[1] != 1 and len(self.datums) - len(nodes) + extra_dofs > 0:
+                node_uncertainties = (
+                    np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                    * (self.data_delta[:,m]**2).sum()
+                    / ((len(self.datums) - len(nodes) + extra_dofs))
+                )
+                for k,node in enumerate(nodes):
+                    self.node_uncertainties[node.name][m] = node_uncertainties[k]
+                self.uncertainties_valid = True
+            elif A.shape[1] != 1 and W is not None:
+                logging.warning("too few degrees of freedom cannot compute valid uncertainties")
+                node_uncertainties = (
+                    np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
+                    * (self.data_delta[:,m]**2).sum()
+                )
+                for k,node in enumerate(nodes):
+                    self.node_uncertainties[node.name][m] = node_uncertainties[k]
+                self.uncertainties_valid = False
+            elif A.shape[1] != 1:
+                logging.warning("too few degrees of freedom cannot compute valid uncertainties")
+                if W is not None:
+                    node_uncertainties = (
+                        np.diag(np.linalg.pinv((A.T @ W @ A).toarray()))
+                        * (self.data_delta[:,m]**2).sum()
+                    )
+                else:
+                    node_uncertainties = (
+                        np.diag(np.linalg.pinv((A.T @ A).toarray()))
+                        * (self.data_delta[:,m]**2).sum()
+                    )
+                for k,node in enumerate(nodes):
+                    self.node_uncertainties[node.name][m] = node_uncertainties[k]
+                self.uncertainties_valid = False
+            else:
+                for node in nodes:
+                    self.node_uncertainties[node.name][m] = 1.0
+            
+        for node in self.nodes.values():
+            node.rule.uncertainty = self.node_uncertainties[node.name]
+            
+        for node in self.nodes.values():
+            if node.rule.uncertainty is None:
+                node.rule.uncertainty = node.parent.rule.uncertainty
+            elif node.rule.num_data == 0:
+                node.rule.uncertainty = 0.0 #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
+        
+    def select_nodes(self, num=1):
+        """
+        Picks the nodes with the largest magintude rule values
+        """
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes and node.name not in self.new_nodes
+            ]
+        else:
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes and node.name not in self.new_nodes]
+
+        if len(selectable_nodes) > num:
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    np.dot(self.node_uncertainties[node.name],self.target_weights) * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    np.dot(self.node_uncertainties[node.name],self.target_weights)
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            inds = np.argsort(rulevals)
+            maxinds = inds[-num:]
+            nodes = [
+                node
+                for i, node in enumerate(selectable_nodes)
+                if i in maxinds and len(node.items) > 1 and not np.isnan(rulevals[i])
+            ]
+            return nodes
+        else:
+            return selectable_nodes
+
+    def choose_extension(self, node, exts):
+        """
+        select best extension among the set of extensions
+        returns a Node object
+        almost always subclassed
+        """
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
+        maxval = 0.0
+        maxext = None
+        for ext in exts:
+            new, comp = split_mols(structs, ext)
+            newval = 0.0
+            compval = 0.0
+            for i, datum in enumerate(self.datums):
+                for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if any(d is x for x in new):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name] * self.target_weights
+                        s = sum(
+                            np.dot(self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ],self.target_weights)
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
+                        newval += np.dot(self.data_delta[i,:],v) / s
+                    elif any(d is x for x in comp):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name] * self.target_weights
+                        s = sum(
+                            np.dot(self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ],self.target_weights)
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
+                        compval += np.dot(self.data_delta[i,:],v) / s
+            val = abs(newval - compval)
+            if val > maxval:
+                maxval = val
+                maxext = ext
+
+        return maxext
 
 class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
     """
