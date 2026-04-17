@@ -1713,7 +1713,6 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             if val_mae < self.min_val_error:
                 self.min_val_error = val_mae
                 self.best_tree_nodes = list(self.nodes.keys())
-                self.bestA = A
                 self.best_nodes = {k: v for k, v in self.nodes.items()}
                 self.best_mol_node_maps = {
                     k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
@@ -2247,7 +2246,6 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             if val_mae < self.min_val_error:
                 self.min_val_error = val_mae
                 self.best_tree_nodes = list(self.nodes.keys())
-                self.bestA = A
                 self.best_nodes = {k: v for k, v in self.nodes.items()}
                 self.best_mol_node_maps = {
                     k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
