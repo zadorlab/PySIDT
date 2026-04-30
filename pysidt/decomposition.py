@@ -1,3 +1,5 @@
+from pysidt.mol import *
+
 def atom_decomposition(mol):
     structs = []
     for i in range(len(mol.atoms)):
@@ -93,3 +95,16 @@ def adsorbate_site_decomposition(mol):
         structs.append(st)
     
     return structs
+
+def ring_decomposition(mol):
+    out = []
+    cycles = mol.get_deterministic_sssr()
+    for cycle in cycles:
+        m = mol.copy(deep=True)
+        for a in cycle:
+            ind = mol.atoms.index(a)
+            m.atoms[ind].label = "*"
+        out.append(m)
+
+    return out
+
