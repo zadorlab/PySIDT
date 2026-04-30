@@ -2381,6 +2381,52 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
         else:
             return selectable_nodes
 
+    def choose_extension(self, node, exts):
+        """
+        select best extension among the set of extensions
+        returns a Node object
+        almost always subclassed
+        """
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
+        maxval = 0.0
+        maxext = None
+        for ext in exts:
+            new, comp = split_mols(structs, ext)
+            newval = 0.0
+            compval = 0.0
+            for i, datum in enumerate(self.datums):
+                for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
+                    if any(d is x for x in new):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name] * self.target_weights
+                        s = sum(
+                            np.dot(self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ],self.target_weights)
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
+                        newval += np.dot(self.data_delta[i,:],v) / s
+                    elif any(d is x for x in comp):
+                        v = self.node_uncertainties[
+                            self.mol_node_maps[datum]["nodes"][j].name] * self.target_weights
+                        s = sum(
+                            np.dot(self.node_uncertainties[
+                                self.mol_node_maps[datum]["nodes"][k].name
+                            ],self.target_weights)
+                            for k in range(len(self.mol_node_maps[datum]["nodes"]))
+                        )
+                        compval += np.dot(self.data_delta[i,:],v) / s
+            val = abs(newval - compval)
+            if val > maxval:
+                maxval = val
+                maxext = ext
+
+        return maxext
+
 class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
     """
     This SIDT class is a multi-evaluation "and" classifier 
