@@ -1155,6 +1155,46 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
         else:
             return None
 
+    def fit_node(self, node, skip_val=False):
+        if not node.items:
+            logging.warning(f"Node: {node.name} was empty")
+            node.rule = None 
+            return
+        
+        node_data = [d.value for d in node.items]
+        n = len(node_data)
+        wsum = sum(d.weight for d in node.items)
+        wsq_sum = sum(d.weight**2 for d in node.items)
+        if (wsum - wsq_sum/wsum) > 1e-3: 
+            data_mean = sum(d.value * d.weight for d in node.items) / wsum
+            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+        else: #primarily if weights are all 1.0
+            data_mean = np.mean(node_data)
+            data_var = np.var(node_data)
+        
+        if n == 1:
+            node.rule = Rule(value=node_data[0], uncertainty=None, num_data=n)
+        else:    
+            node.rule = Rule(value=data_mean, uncertainty=data_var, num_data=n)
+
+        n = node
+        while n.rule is None:
+            n = n.parent
+        node.rule = n.rule
+        if node.rule.uncertainty is None:
+            node.rule.uncertainty = node.parent.rule.uncertainty
+
+        assert not isinstance(node.rule.value,float), (node.name,node_data)
+        if not skip_val and self.validation_set:
+            val_error = [np.dot(self.evaluate(d.mol) - d.value, self.target_weights) for d in self.validation_set]
+            val_mae = np.mean(np.abs(np.array(val_error)))
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
+                self.best_tree_nodes = list(self.nodes.keys())
+            self.val_mae = val_mae
+            logging.info("Root: {0}  Nodes: {1}".format(self.root.name,len(self.nodes)))
+            logging.info("validation MAE: {}".format(self.val_mae))
+
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     """
