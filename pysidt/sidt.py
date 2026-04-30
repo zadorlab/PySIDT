@@ -2082,6 +2082,99 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
         else:
             return pred
 
+class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorphicDecisionTreeRegressor):
+    """
+    class for Multi-target Multi-evaluation SIDTs
+    """
+    def __init__(
+        self,
+        decomposition,
+        target_weights=None,
+        root_group=None,
+        nodes=None,
+        initial_root_splits=None,
+        n_strucs_min=1,
+        iter_max=2,
+        iter_item_cap=100,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
+        fract_nodes_expand_per_iter=0,
+        r=None,
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
+        uncertainty_prepruning=False,
+        weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
+    ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
+
+        super().__init__(
+            decomposition,
+            root_group=root_group,
+            nodes=nodes,
+            initial_root_splits=initial_root_splits,
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
+            uncertainty_prepruning=uncertainty_prepruning,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+            max_ring_gen_size=max_ring_gen_size,
+            weigh_node_selection_by_occurrence=weigh_node_selection_by_occurrence,
+        )
+        
+        self.fract_nodes_expand_per_iter = fract_nodes_expand_per_iter
+        self.decomposition = decomposition
+        self.mol_submol_node_maps = None
+        self.data_delta = None
+        self.datums = None
+        self.validation_set = None
+        self.best_tree_nodes = None
+        self.best_rule_map = None
+        self.min_val_error = np.inf
+        self.uncertainties_valid = True
+        self.assign_depths()
+        self.W = None # weight matrix for weighted least squares
+        self.weights = None #weight list for weighted least squares
+        self.validation_set = None
+        self.test_set = None
+
+        if target_weights is not None:
+            self.target_num = len(target_weights)
+            self.target_weights = target_weights
+        else:
+            self.target_num = len(self.root.rule.value)
+
+        self.cached_A_depth_dict = dict()
+        self.cached_pred_depth_target_dict = dict()
+        self.cached_nodes_depth_dict = dict()
+        
 class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
     """
     This SIDT class is a multi-evaluation "and" classifier 
