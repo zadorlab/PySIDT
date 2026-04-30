@@ -2175,6 +2175,95 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
         self.cached_pred_depth_target_dict = dict()
         self.cached_nodes_depth_dict = dict()
         
+    def fit_rule(self, alpha, update_cache=True):
+        max_depth = max([node.depth for node in self.nodes.values()])
+        ys = [np.array([datum.value[k] for datum in self.datums]) for k in range(self.target_num)]
+        preds = [np.zeros(len(self.datums)) for k in range(self.target_num)]
+        self.data_delta = np.zeros((len(self.datums),self.target_num))
+        self.node_uncertainties = dict()
+        weights = self.weights
+        W = self.W
+
+        unchanged = not update_cache
+        for depth in range(max_depth + 1):
+            nodes = [node for node in self.nodes.values() if node.depth == depth]
+            unchanged = unchanged and all(n.rule is not None for n in nodes)
+
+            if not unchanged:
+                A = sp.lil_matrix((len(self.datums), len(nodes)))
+                for i, datum in enumerate(self.datums):
+                    for node in self.mol_node_maps[datum]["nodes"]:
+                        while node is not None:
+                            if node in nodes:
+                                j = nodes.index(node)
+                                A[i, j] += 1.0
+                            node = node.parent
+
+                self.cached_A_depth_dict[depth] = A
+                self.cached_nodes_depth_dict[depth] = nodes
+            
+                            
+                for k in range(self.target_num):
+                    
+                    if isinstance(alpha,(int,float,np.float64)):
+                        a = alpha
+                    else:
+                        a = alpha[k]
+                        
+                    ys[k] -= preds[k]
+        
+                    clf = linear_model.Lasso(
+                        alpha=a,
+                        fit_intercept=False,
+                        tol=1e-4,
+                        max_iter=1000000000,
+                        selection="random",
+                    )
+                    if weights is not None:
+                        lasso = clf.fit(A, ys[k], sample_weight=weights)
+                    else:
+                        lasso = clf.fit(A, ys[k])
+                    
+                    preds[k] = A * clf.coef_
+                    
+                    self.cached_pred_depth_target_dict[(depth,k)] = preds[k]
+                    self.data_delta[:,k] = preds[k] - ys[k]
+        
+                    for i, val in enumerate(clf.coef_):
+                        if not nodes[i].rule:
+                            nodes[i].rule = Rule(value=np.zeros(self.target_num), num_data=np.sum(A[:, i]))
+                        nodes[i].rule.value[k] = val
+            else:
+                for k in range(self.target_num):
+                    ys[k] -= preds[k]
+                    preds[k] = self.cached_pred_depth_target_dict[(depth,k)]
+                    self.data_delta[:,k] = preds[k] - ys[k]
+        
+        logging.info("training MAE: {}".format(np.mean(np.abs(np.array(self.data_delta @ self.target_weights)))))
+
+        if self.validation_set:
+            val_error = [np.dot(self.evaluate(d.mol, estimate_uncertainty=False),self.target_weights) - np.dot(d.value,self.target_weights) for d in self.validation_set]
+            val_mae = np.mean(np.abs(np.array(val_error)))
+            if val_mae < self.min_val_error:
+                self.min_val_error = val_mae
+                self.best_tree_nodes = list(self.nodes.keys())
+                self.bestA = A
+                self.best_nodes = {k: v for k, v in self.nodes.items()}
+                self.best_mol_node_maps = {
+                    k: {"mols": v["mols"][:], "nodes": v["nodes"][:]}
+                    for k, v in self.mol_node_maps.items()
+                }
+                self.best_rule_map = {name:self.nodes[name].rule for name in self.best_tree_nodes}
+            self.val_mae = val_mae
+            logging.info("validation MAE: {}".format(self.val_mae))
+
+        if self.test_set:
+            test_error = [np.dot(self.evaluate(d.mol),self.target_weights) - np.dot(d.value,self.target_weights) for d in self.test_set]
+            test_mae = np.mean(np.abs(np.array(test_error)))
+            logging.info("test MAE: {}".format(test_mae))
+            
+        logging.info("# nodes: {}".format(len(self.nodes)))
+
 class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
     """
     This SIDT class is a multi-evaluation "and" classifier 
