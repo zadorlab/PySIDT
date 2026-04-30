@@ -1314,6 +1314,47 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
         self.nodes = nodes
         self.root = self.nodes["Root"]
 
+    def scale_uncertainties(self,validation_set=None):
+        """
+        rescales uncertainty predictions by a constant to better match validation errors
+        """
+        if validation_set is not None:
+            self.validation_set = validation_set
+        
+        assert self.validation_set is not None
+        
+        if self.node_uncertainties is None:
+            self.node_uncertainties = {node.name: node.rule.uncertainty for node in self.nodes.values()}
+        
+        val_predictions_uncertainties = [self.evaluate(d.mol, estimate_uncertainty=True) for d in self.validation_set]
+        val_predictions = [pred_unc[0] for pred_unc in val_predictions_uncertainties]
+        val_uncertainties = [pred_unc[1] for pred_unc in val_predictions_uncertainties]
+        val_error = [val_predictions[i] - self.validation_set[i].value for i in range(len(self.validation_set))]
+        initial_scaling_factor = 1.0
+        
+        def get_bounded_fraction(errs, uncs, confidence_level):
+            t = scipy.stats.norm.ppf((1 + confidence_level) / 2)
+            return np.sum(uncs * t >= np.abs(errs)) / len(errs)
+
+        def get_calibration_curve(errs, uncs, n=50):
+            confidence_levels = np.linspace(0, 1, n)
+            proportion_correct = [get_bounded_fraction(errs, uncs, confidence_level) for confidence_level in confidence_levels]
+            return confidence_levels, proportion_correct
+        
+        def objective_function(scaling_factor, errs, uncs, n = 500):
+            scaled_uncs = scaling_factor * uncs
+            confidence_levels, proportion_correct = get_calibration_curve(errs, scaled_uncs, n)
+            return np.nansum((proportion_correct - confidence_levels)**2)
+            
+        for target_ind in range(len(self.target_num)):
+            result = minimize(objective_function, initial_scaling_factor, args=(np.array([x[target_ind] for x in val_error]), np.array([x[target_ind] for x in val_uncertainties])), method="Nelder-Mead")
+            optimized_scaling_factor = result.x[0]
+            logging.info(f"Scaling Node Uncertainties by Optimized Scaling Factor {optimized_scaling_factor**2:.3f}")
+            for name,node in self.nodes.items():
+                self.node_uncertainties[name][target_ind] *= optimized_scaling_factor**2
+                self.nodes[name].rule.uncertainty[target_ind] = self.node_uncertainties[name][target_ind]
+            
+    
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     """
