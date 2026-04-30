@@ -1382,13 +1382,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             
                 preds = A * clf.coef_
                 self.cached_pred_depth_dict[depth] = preds
+                
+                for i, val in enumerate(clf.coef_):
+                    nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
+
             else:
                 preds = self.cached_pred_depth_dict[depth]
             
             self.data_delta = preds - y
-
-            for i, val in enumerate(clf.coef_):
-                nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
 
         train_error = self.data_delta
 
