@@ -1241,7 +1241,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             `validation_set`: list of Datum objects to validate the tree
             `max_nodes`: maximum number of nodes to generate
             `postpruning_based_on_val`: if True, regularize the tree based on the validation set
-            `alpha`: regularization parameter for Lasso regression
+            `alpha`: regularization parameter/s for Lasso regression (float if single target, dict mapping index to value if multi-target)
         """
         np.random.seed(0)
         logging.info("Checking starting tree is subgraph isomorphic")
@@ -1255,8 +1255,14 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.descend_training_from_top(only_specific_match=True)
         
         if alpha is None:
-            alpha = 1e-6 * np.mean(np.abs([d.value for d in data]))
-            logging.info("automatically selecting alpha={}".format(alpha))
+            if isinstance(data[0].value,(list, np.ndarray)):
+                alpha = dict()
+                for i in range(len(data[0].value)):
+                    alpha[i] = 1e-6 * np.nanmean(np.abs([d.value[i] for d in data]))
+                logging.info("automatically selecting alpha={}".format(alpha))
+            else:
+                alpha = 1e-6 * np.mean(np.abs([d.value for d in data]))
+                logging.info("automatically selecting alpha={}".format(alpha))
             
         self.val_mae = np.inf
         self.skip_nodes = []
