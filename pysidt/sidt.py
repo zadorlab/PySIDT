@@ -2340,6 +2340,47 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             elif node.rule.num_data == 0:
                 node.rule.uncertainty = 0.0 #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
         
+    def select_nodes(self, num=1):
+        """
+        Picks the nodes with the largest magintude rule values
+        """
+        if self.uncertainty_prepruning:
+            selectable_nodes = [
+                node for node in self.nodes.values() if not is_prepruned_by_uncertainty(node) and node.name not in self.skip_nodes and node.name not in self.new_nodes
+            ]
+        else:
+            selectable_nodes = [node for node in self.nodes.values() if node.name not in self.skip_nodes and node.name not in self.new_nodes]
+
+        if len(selectable_nodes) > num:
+            if self.weigh_node_selection_by_occurrence:
+                rulevals = [
+                    np.dot(self.node_uncertainties[node.name],self.target_weights) * len(node.items)
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            else:
+                rulevals = [
+                    np.dot(self.node_uncertainties[node.name],self.target_weights)
+                    if len(node.items) > 1
+                    and not (node.name in self.new_nodes)
+                    and not (node.name in self.skip_nodes)
+                    else 0.0
+                    for node in selectable_nodes
+                ]
+            inds = np.argsort(rulevals)
+            maxinds = inds[-num:]
+            nodes = [
+                node
+                for i, node in enumerate(selectable_nodes)
+                if i in maxinds and len(node.items) > 1 and not np.isnan(rulevals[i])
+            ]
+            return nodes
+        else:
+            return selectable_nodes
+
 class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphIsomorphicDecisionTree):
     """
     This SIDT class is a multi-evaluation "and" classifier 
