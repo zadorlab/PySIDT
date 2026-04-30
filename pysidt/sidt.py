@@ -36,7 +36,7 @@ class Rule:
         self.comment = comment 
         
     def __repr__(self) -> str:
-        if self.uncertainty:
+        if self.uncertainty is not None:
             return f"{self.value} +|- {np.sqrt(self.uncertainty)} (N={self.num_data}, comment={self.comment})"
         else:
             return f"{self.value} (N={self.num_data}, comment={self.comment})"
@@ -89,7 +89,7 @@ class Datum:
 
 class SubgraphIsomorphicDecisionTree:
     """
-    Makes prediction for a molecule based on multiple evaluations.
+    Makes prediction for a molecule based on one evaluation. 
 
     Args:
         `root_group`: root group for the tree
@@ -1125,6 +1125,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.weights = None #weight list for weighted least squares
         self.validation_set = None
         self.test_set = None
+        self.cached_A_depth_dict = dict()
+        self.cached_pred_depth_dict = dict()
+        self.cached_nodes_depth_dict = dict()
 
     def decompose(self,struct):
         if isinstance(self.decomposition,list):
@@ -1226,7 +1229,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         test_set=None,
         max_nodes=None,
         postpruning_based_on_val=True,
-        alpha=0.1,
+        alpha=None,
         scale_uncertainties=False,
     ):
         """
@@ -1251,6 +1254,10 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if len(self.nodes) > 1:
             self.descend_training_from_top(only_specific_match=True)
         
+        if alpha is None:
+            alpha = 1e-6 * np.mean(np.abs([d.value for d in data]))
+            logging.info("automatically selecting alpha={}".format(alpha))
+            
         self.val_mae = np.inf
         self.skip_nodes = []
         self.new_nodes = []
@@ -1310,7 +1317,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if scale_uncertainties:
             self.scale_uncertainties()
          
-    def fit_tree(self, data=None, check_data=True, alpha=0.1):
+    def fit_tree(self, alpha, data=None, check_data=True):
         """
         fit rule for each node
         """
@@ -1323,48 +1330,61 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.estimate_uncertainty()
         
 
-    def fit_rule(self, alpha=0.1):
+    def fit_rule(self, alpha):
         max_depth = max([node.depth for node in self.nodes.values()])
         y = np.array([datum.value for datum in self.datums])
+            
         preds = np.zeros(len(self.datums))
         self.node_uncertainties = dict()
         weights = self.weights
         W = self.W
 
+        unchanged = False
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
-
-            # generate matrix
-            A = sp.lil_matrix((len(self.datums), len(nodes)))
-            y -= preds
-
-            for i, datum in enumerate(self.datums):
-                for node in self.mol_node_maps[datum]["nodes"]:
-                    while node is not None:
-                        if node in nodes:
-                            j = nodes.index(node)
-                            A[i, j] += 1.0
-                        node = node.parent
-
-            clf = linear_model.Lasso(
-                alpha=alpha,
-                fit_intercept=False,
-                tol=1e-4,
-                max_iter=1000000000,
-                selection="random",
-            )
-            if weights is not None:
-                lasso = clf.fit(A, y, sample_weight=weights)
-            else:
-                lasso = clf.fit(A, y)
+            unchanged = unchanged and all(n.rule is not None for n in nodes)
             
-            preds = A * clf.coef_
+            y -= preds
+            
+            if not unchanged:
+                # generate matrix
+                A = sp.lil_matrix((len(self.datums), len(nodes)))
+                
+                for i, datum in enumerate(self.datums):
+                    for node in self.mol_node_maps[datum]["nodes"]:
+                        while node is not None:
+                            if node in nodes:
+                                j = nodes.index(node)
+                                A[i, j] += 1.0
+                            node = node.parent
+
+                self.cached_A_depth_dict[depth] = A
+                self.cached_nodes_depth_dict[depth] = nodes
+                
+                clf = linear_model.Lasso(
+                    alpha=alpha,
+                    fit_intercept=False,
+                    tol=1e-4,
+                    max_iter=1000000000,
+                    selection="random",
+                )
+                if weights is not None:
+                    lasso = clf.fit(A, y, sample_weight=weights)
+                else:
+                    lasso = clf.fit(A, y)
+                    
+            
+                preds = A * clf.coef_
+                self.cached_pred_depth_dict[depth] = preds
+            else:
+                preds = self.cached_pred_depth_dict[depth]
+            
             self.data_delta = preds - y
 
             for i, val in enumerate(clf.coef_):
                 nodes[i].rule = Rule(value=val, num_data=np.sum(A[:, i]))
 
-        train_error = [self.evaluate(d.mol, estimate_uncertainty=False) - d.value for d in self.datums]
+        train_error = self.data_delta
 
         logging.info("training MAE: {}".format(np.mean(np.abs(np.array(train_error)))))
 
@@ -1392,27 +1412,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         logging.info("# nodes: {}".format(len(self.nodes)))
 
     def estimate_uncertainty(self,rel_node_dof_tolerance=1e-5):
-        nodes = [node for node in self.nodes.values()]
+        max_depth = max([node.depth for node in self.nodes.values()])
+        nodes = sum([self.cached_nodes_depth_dict[depth] for depth in range(max_depth+1)],[])
 
-        weights = self.weights
         W = self.W
 
         # generate matrix
-        A = sp.csc_matrix((len(self.datums), len(nodes)))
-        y = np.array([datum.value for datum in self.datums])
-        preds = np.zeros(len(self.datums))
+        A = sp.block_array([[self.cached_A_depth_dict[depth] for depth in range(max_depth+1)]],format='csc')
 
-        for i, datum in enumerate(self.datums):
-            for node in self.mol_node_maps[datum]["nodes"]:
-                while node is not None:
-                    if node in nodes:
-                        j = nodes.index(node)
-                        A[i, j] += 1.0
-                        preds[i] += node.rule.value
-                    node = node.parent
-
-        self.data_delta = preds - y
-        rules = [n.rule.value for n in self.nodes.values()]
+        rules = [n.rule.value for n in nodes]
         rule_mean = abs(np.mean(rules))
         atol = rule_mean*rel_node_dof_tolerance
         self.abs_node_dof_tolerance = atol
