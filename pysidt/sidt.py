@@ -1195,6 +1195,48 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
             logging.info("Root: {0}  Nodes: {1}".format(self.root.name,len(self.nodes)))
             logging.info("validation MAE: {}".format(self.val_mae))
 
+    def choose_extension(self, node, exts):
+        """
+        select best extension among the set of extensions
+        returns a Node object
+        almost always subclassed
+        """
+        logging.info(f"Choosing from {len(exts)} extensions")
+        if self.choose_extension_based_on_subsamples:
+            structs = self.stuctures_for_extension_generation
+        else:
+            structs = node.items
+            
+        minval = np.inf
+        minext = None
+        for ext in exts:
+            new, comp = split_mols(structs, ext)
+            Lnew = len(new)
+            Lcomp = len(comp)
+            if Lnew  > 1 and Lcomp > 1:
+                val = np.std([np.dot(x.value,self.target_weights) for x in new]) * Lnew  + np.std(
+                [np.dot(x.value,self.target_weights) for x in comp]
+            ) * Lcomp
+            elif Lnew  == 1 and Lcomp == 1:
+                val = 0.0
+            elif Lnew  == 1:
+                val = np.std([np.dot(x.value,self.target_weights) for x in comp]) * Lcomp
+            elif Lcomp == 1:
+                val = np.std([np.dot(x.value,self.target_weights) for x in new]) * Lnew 
+            else: #did not split?
+                logging.error("group:")
+                logging.error(ext.to_adjacency_list())
+                logging.error("data:")
+                for item in node.items:
+                    logging.error(item.mol.to_adjacency_list())
+                raise ValueError("Generated extension did not split items")
+
+            if val < minval:
+                minval = val
+                minext = ext
+
+        return minext
+
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     """
