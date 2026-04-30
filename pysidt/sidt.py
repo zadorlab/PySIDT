@@ -904,7 +904,12 @@ def to_dict(obj):
             json.dumps(val)
             out_dict[attr] = val
         except:
-            if isinstance(val, ScalarQuantity):
+            if isinstance(val, np.ndarray):
+                out_dict[attr] = {
+                    "class": "array",
+                    "object": val.tolist(),
+                }
+            elif isinstance(val, ScalarQuantity):
                 out_dict[attr] = {
                     "class": val.__class__.__name__,
                     "value": val.value,
@@ -1014,6 +1019,8 @@ def read_nodes(file, class_dict=None):
     """
     if class_dict is None:
         class_dict = globals()
+    
+    class_dict["array"] = np.array
 
     with open(file, "r") as f:
         nodesdict = json.load(f)
