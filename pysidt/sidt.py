@@ -1043,6 +1043,78 @@ def read_nodes(file, class_dict=None):
 
     return nodes
 
+class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
+    """target_weights,
+    class for Multi-target single-evaluation SIDTs
+    """
+    def __init__(
+        self,
+        target_weights=None,
+        root_group=None,
+        nodes=None,
+        initial_root_splits=None,
+        n_strucs_min=1,
+        iter_max=2,
+        iter_item_cap=100,
+        max_structures_to_generate_extensions=400,
+        choose_extension_based_on_subsamples=False,
+        fract_nodes_expand_per_iter=0,
+        r=None,
+        r_bonds=None,
+        r_un=None,
+        r_site=None,
+        r_morph=None,
+        r_ncoord=None,
+        r_lone_pairs=None,
+        max_nodes=np.inf,
+        uncertainty_prepruning=False,
+        weigh_node_selection_by_occurrence=True,
+        reverse_extension_generation_allowed=True,
+        max_ring_gen_size=None,
+    ):
+        if nodes is None:
+            nodes = dict()
+        if r_bonds is None:
+            r_bonds = [1, 2, 3, 1.5, 4]
+        if r_un is None:
+            r_un = [0, 1, 2, 3]
+        if r_site is None:
+            r_site = []
+        if r_morph is None:
+            r_morph = []
+        if r_ncoord is None:
+            r_ncoord = []
+        if r_lone_pairs is None:
+            r_lone_pairs = []
+
+        super().__init__(
+            root_group=root_group,
+            nodes=nodes,
+            initial_root_splits=initial_root_splits,
+            n_strucs_min=n_strucs_min,
+            iter_max=iter_max,
+            iter_item_cap=iter_item_cap,
+            max_structures_to_generate_extensions=max_structures_to_generate_extensions,
+            choose_extension_based_on_subsamples=choose_extension_based_on_subsamples,
+            r=r,
+            r_bonds=r_bonds,
+            r_un=r_un,
+            r_site=r_site,
+            r_morph=r_morph,
+            r_ncoord=r_ncoord,
+            r_lone_pairs=r_lone_pairs,
+            uncertainty_prepruning=uncertainty_prepruning,
+            max_nodes=max_nodes,
+            reverse_extension_generation_allowed=reverse_extension_generation_allowed,
+            max_ring_gen_size=max_ring_gen_size,
+            weigh_node_selection_by_occurrence=weigh_node_selection_by_occurrence,
+        )
+
+        if target_weights is not None:
+            self.target_num = len(target_weights)
+            self.target_weights = target_weights
+        else:
+            self.target_num = len(self.root.rule.value)
 
 class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
     """
