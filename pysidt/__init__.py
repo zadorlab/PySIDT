@@ -1,7 +1,9 @@
 from pysidt.sidt import (
     SubgraphIsomorphicDecisionTree,
+    MultiTargetSingleEvalSubgraphIsomorphicDecisionTree,
     MultiEvalSubgraphIsomorphicDecisionTree,
     MultiEvalSubgraphIsomorphicDecisionTreeRegressor,
+    MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor,
     MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier,
     Node,
     Datum,
