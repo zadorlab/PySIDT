@@ -49,3 +49,29 @@ def generate_bicyclic_groups(ring_size_max=9):
                 out.append(bigrp)
 
     return out
+
+def max_num_fused_cycles(mol):
+    cycles = mol.get_deterministic_sssr()
+    cycle_sets = [set(cycle) for cycle in cycles]
+    fused_cycle_indices = []
+    for i,cset in enumerate(cycle_sets):
+        for j,cset2 in enumerate(cycle_sets):
+            if i == j:
+                continue
+            if len(cset.intersection(cset2)) > 0:
+                for x in fused_cycle_indices:
+                    if i in x and j in x:
+                        break
+                    elif i in x:
+                        x.append(j)
+                        break
+                    elif j in x:
+                        x.append(i)
+                        break
+                else:
+                    fused_cycle_indices.append([i,j])
+    if fused_cycle_indices:
+        return max(len(x) for x in fused_cycle_indices)
+    else:
+        return 0
+    
