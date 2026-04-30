@@ -75,3 +75,55 @@ def max_num_fused_cycles(mol):
     else:
         return 0
     
+def label_bicyclic(mol_ori,m,cycle1,cycle2,cinter):
+    #rename cycles check symmetry
+    lc1 = len(cycle1)
+    lc2 = len(cycle2)
+    if lc1 == lc2:
+        same_cycle_size = True
+        c1 = cycle1
+        c2 = cycle2
+    elif lc2 > lc1:
+        same_cycle_size = False
+        c1 = cycle2
+        c2 = cycle1
+    else:
+        same_cycle_size = False
+        c1 = cycle1
+        c2 = cycle2
+
+    bicycle = set(c1) | set(c2)
+    
+    #find central intersection atoms
+    central_atoms = cinter
+    atoms_to_remove = []
+    while len(atoms_to_remove) < len(central_atoms):
+        for a in atoms_to_remove:
+            central_atoms.remove(a)
+        for a in central_atoms:
+            if a not in atoms_to_remove and any(b not in central_atoms for b in a.bonds.keys() if b in bicycle):
+                atoms_to_remove.append(a)
+
+    collected_atoms = set()
+    new_collected_atoms = set(central_atoms)
+    
+    dist = 0
+    while len(collected_atoms) < len(bicycle):
+        atoms_to_collect = set()
+        collected_atoms |= new_collected_atoms
+        for a in new_collected_atoms:
+            ind = mol_ori.atoms.index(a)
+            if a in cinter:
+                label = "*f"
+            elif same_cycle_size or a in c1:
+                label = "*b"
+            else:
+                label = "*s"
+            label += str(dist)
+            matom = m.atoms[ind].label = label
+            atoms_to_collect |= {b for b in a.bonds.keys() if b not in collected_atoms and b in bicycle}
+            
+        dist += 1
+        new_collected_atoms = atoms_to_collect
+
+    return
