@@ -108,3 +108,65 @@ def ring_decomposition(mol):
 
     return out
 
+def get_fused_cycle_sets(mol):
+    cycles = mol.get_deterministic_sssr()
+    cycle_sets = [set(cycle) for cycle in cycles]
+    fused_cycle_indices = []
+    for i,cset in enumerate(cycle_sets):
+        for j,cset2 in enumerate(cycle_sets):
+            if i == j:
+                continue
+            if len(cset.intersection(cset2)) > 0:
+                for x in fused_cycle_indices:
+                    if i in x and j in x:
+                        break
+                    elif i in x:
+                        x.append(j)
+                        break
+                    elif j in x:
+                        x.append(i)
+                        break
+                else:
+                    fused_cycle_indices.append([i,j])
+
+    return [[cycles[i] for i in x] for x in fused_cycle_indices],cycles
+        
+def bicyclic_ring_decomposition(mol):
+    out = []
+    fused_cycle_lists,cycles = get_fused_cycle_sets(mol)
+    for fused_cycles in fused_cycle_lists:
+        for i,cycle in enumerate(fused_cycles):
+            for j,cycle2 in enumerate(fused_cycles):
+                if i <= j:
+                    continue
+                    
+                cinter = set(cycle).intersection(set(cycle2))
+                
+                if len(cinter) == 0:
+                    continue
+                    
+                m = mol.copy(deep=True)
+                label_bicyclic(mol,m,cycle,cycle2,cinter)
+                out.append(m)
+
+    return out
+
+def bicyclic_plus_ring_decomposition(mol):
+    out = []
+    fused_cycle_lists,cycles = get_fused_cycle_sets(mol)
+    for fused_cycles in fused_cycle_lists:
+        for i,cycle in enumerate(fused_cycles):
+            for j,cycle2 in enumerate(fused_cycles):
+                if i <= j:
+                    continue
+                    
+                cinter = set(cycle).intersection(set(cycle2))
+                
+                if len(cinter) == 0:
+                    continue
+                    
+                m = mol.copy(deep=True)
+                label_bicyclic(mol,m,cycle,cycle2,cinter)
+                out.append(m)
+
+    return ring_decomposition(mol,cycles)+out
