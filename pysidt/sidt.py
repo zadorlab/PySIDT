@@ -1273,7 +1273,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         
         while True:
             logging.info("Fitting Tree")
-            self.fit_tree(alpha=alpha)
+            self.fit_tree(alpha=alpha,update_cache=False)
             if len(self.nodes) > max_nodes:
                 break
             self.new_nodes = []
@@ -1323,7 +1323,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         if scale_uncertainties:
             self.scale_uncertainties()
          
-    def fit_tree(self, alpha, data=None, check_data=True):
+    def fit_tree(self, alpha, data=None, check_data=True, update_cache=True):
         """
         fit rule for each node
         """
@@ -1331,12 +1331,12 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             self.setup_data(data, check_data=check_data)
             self.descend_training_from_top(only_specific_match=True)
 
-        self.fit_rule(alpha=alpha)
+        self.fit_rule(alpha=alpha,update_cache=update_cache)
 
         self.estimate_uncertainty()
         
 
-    def fit_rule(self, alpha):
+    def fit_rule(self, alpha, update_cache=True):
         max_depth = max([node.depth for node in self.nodes.values()])
         y = np.array([datum.value for datum in self.datums])
             
@@ -1345,7 +1345,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         weights = self.weights
         W = self.W
 
-        unchanged = False
+        unchanged = not update_cache
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
             unchanged = unchanged and all(n.rule is not None for n in nodes)
