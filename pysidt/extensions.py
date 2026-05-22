@@ -14,7 +14,7 @@ except:
     from rmgpy.molecule.group import GroupAtom, GroupBond
     from rmgpy.molecule.molecule import Molecule
 
-from pysidt.utils import find_shortest_paths
+from pysidt.utils import find_shortest_paths, evaluate_single
 
 
 def split_mols(data, newgrp):
@@ -996,7 +996,7 @@ def get_extensions(
     return extents
 
 
-def specify_atom_extensions(grp, i, basename, r, r_full):
+def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the type of atom defined by a given atomtype
     or set of atomtypes
@@ -1035,20 +1035,50 @@ def specify_atom_extensions(grp, i, basename, r, r_full):
         else:
             old_atom_type_str = old_atom_type[0].label
 
-        grps.append(
-            (
-                g,
-                grpc,
-                basename + "_" + str(i + 1) + old_atom_type_str + "->" + "".join([x.label for x in item]),
-                "atomExt",
-                (i,),
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for atom extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp,d in assoc_decomposition_init_value_unc_dict.items():
+                for i,a in enumerate(decomp.atoms):
+                    g.atoms[i].label = a.label
+                v_init,unc_init = d
+                v,unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(unc**2 - unc_init**2)
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(unc**2 - unc_init**2)
+            
+                grps.append(
+                (
+                    g,
+                    grpc,
+                    basename + "_" + str(i + 1) + old_atom_type_str + "->" + "".join([x.label for x in item]),
+                    "atomExt",
+                    (i,),
+                    delta_v,
+                    delta_unc,
+                )
             )
-        )
+                
+        else:
+            grps.append(
+                (
+                    g,
+                    grpc,
+                    basename + "_" + str(i + 1) + old_atom_type_str + "->" + "".join([x.label for x in item]),
+                    "atomExt",
+                    (i,),
+                )
+            )
 
     return grps
 
 
-def specify_ring_extensions(grp, i, basename):
+def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specifying if an atom is in a ring
     """
@@ -1076,20 +1106,48 @@ def specify_ring_extensions(grp, i, basename):
     else:
         atom_type_str = atom_type[0].label
 
-    grps.append(
-        (
-            g,
-            grpc,
-            basename + "_" + str(i + 1) + atom_type_str + "-inRing",
-            "ringExt",
-            (i,),
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ring extensions"
+        assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        grps.append(
+            (
+                g,
+                grpc,
+                basename + "_" + str(i + 1) + atom_type_str + "-inRing",
+                "ringExt",
+                (i,),
+                delta_v,
+                delta_unc,
+            )
         )
-    )
+    else:
+        grps.append(
+            (
+                g,
+                grpc,
+                basename + "_" + str(i + 1) + atom_type_str + "-inRing",
+                "ringExt",
+                (i,),
+            )
+        )
 
     return grps
 
 
-def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full):
+def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
@@ -1128,13 +1186,31 @@ def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full):
         else:
             atom_type_str = atom_type[0].label
 
-        grps.append(
-            (g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,))
-        )
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for unpaired extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,), delta_v, delta_unc))
+        else:
+            grps.append(
+                (g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,))
+            )
 
     return grps
 
-def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full):
+def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of lone pairs on a given atom
     """
@@ -1173,13 +1249,31 @@ def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_fu
         else:
             atom_type_str = atom_type[0].label
 
-        grps.append(
-            (g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,))
-        )
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for lone-pair extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,), delta_v, delta_unc))
+        else:
+            grps.append(
+                (g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,))
+            )
 
     return grps
 
-def specify_site_extensions(grp, i, basename, r_site, r_site_full):
+def specify_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
@@ -1224,14 +1318,32 @@ def specify_site_extensions(grp, i, basename, r_site, r_site_full):
         else:
             atom_type_str = atom_type[0].label
 
-        grps.append(
-            (g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,))
-        )
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for site extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,), delta_v, delta_unc))
+        else:
+            grps.append(
+                (g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,))
+            )
 
     return grps
 
 
-def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full):
+def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
@@ -1276,19 +1388,37 @@ def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full):
         else:
             atom_type_str = atom_type[0].label
 
-        grps.append(
-            (
-                g,
-                grpc,
-                basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]),
-                "morphExt",
-                (i,),
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for morphology extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for morphology extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]), "morphExt", (i,), delta_v, delta_unc))
+        else:
+            grps.append(
+                (
+                    g,
+                    grpc,
+                    basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]),
+                    "morphExt",
+                    (i,),
+                )
             )
-        )
 
     return grps
 
-def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full):
+def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of electrons on a given atom
     """
@@ -1327,13 +1457,31 @@ def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full):
         else:
             atom_type_str = atom_type[0].label
 
-        grps.append(
-            (g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,))
-        )
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ncoord extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for ncoord extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,), delta_v, delta_unc))
+        else:
+            grps.append(
+                (g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,))
+            )
 
     return grps
 
-def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=None):
+def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=None, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for creation of a bond (of undefined order)
     between two atoms indexed i,j that already exist in the group and are unbonded
@@ -1383,7 +1531,43 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
         newgrp = deepcopy(grp)
         newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
 
-        return [
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    newgrp.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+
+            return [
+                (
+                    newgrp,
+                    None,
+                    basename
+                    + "_Int-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + "-"
+                    + str(j + 1)
+                    + atom_type_j_str
+                    + "-Br0",
+                    "intNewBridgeExt",
+                    (i, j),
+                    delta_v,
+                    delta_unc,
+                )
+            ]
+        else:
+            return [
                 (
                     newgrp,
                     None,
@@ -1417,7 +1601,41 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                 bd = GroupBond(tail_atom,head_atom,order=r_bonds)
                 newgrp.add_bond(bd)
             
-            grps.append((
+            if estimate_delta:
+                assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
+                assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
+                delta_v = None
+                delta_unc = None
+                for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                    for k, a in enumerate(decomp.atoms):
+                        newgrp.atoms[k].label = a.label
+                    v_init, unc_init = d
+                    v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+                    if delta_v is None:
+                        delta_v = v - v_init
+                        delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    else:
+                        delta_v += v - v_init
+                        delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+
+                grps.append((
+                    newgrp,
+                    None,
+                    basename
+                    + "_Int-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + "-"
+                    + str(j + 1)
+                    + atom_type_j_str
+                    + "-Br"+str(bridgelen),
+                    "intNewBridgeExt",
+                    (i, j),
+                    delta_v,
+                    delta_unc,
+                ))
+            else:
+                grps.append((
                     newgrp,
                     None,
                     basename
@@ -1434,7 +1652,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
     
     return grps    
 
-def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
+def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the creation of a bond (of undefined order) between
     an atom and a new atom that is not H
@@ -1461,18 +1679,46 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label):
         else:
             atom_type_str = atom_type[0].label
 
-        grps.append(
-            (
-                newgrp,
-                None,
-                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
-                "extNewBondExt",
-                (len(newgrp.atoms) - 1,),
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    newgrp.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append(
+                (
+                    newgrp,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                    delta_v,
+                    delta_unc,
+                )
             )
-        )
+        else:
+            grps.append(
+                (
+                    newgrp,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                )
+            )
     return grps
 
-def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full):
+def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the specification of bond order for a given bond
     """
@@ -1529,21 +1775,55 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full):
         for v in bdict.keys():
             if any(abs(v - x) < 1e-4 for x in bd):
                 b += bdict[v]
-        grps.append(
-            (
-                g,
-                grpc,
-                basename
-                + "_Sp-"
-                + str(i + 1)
-                + atom_type_i_str
-                + b
-                + str(j + 1)
-                + atom_type_j_str,
-                "bondExt",
-                (i, j),
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for bond extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            grps.append(
+                (
+                    g,
+                    grpc,
+                    basename
+                    + "_Sp-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + b
+                    + str(j + 1)
+                    + atom_type_j_str,
+                    "bondExt",
+                    (i, j),
+                    delta_v,
+                    delta_unc,
+                )
             )
-        )
+        else:
+            grps.append(
+                (
+                    g,
+                    grpc,
+                    basename
+                    + "_Sp-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + b
+                    + str(j + 1)
+                    + atom_type_j_str,
+                    "bondExt",
+                    (i, j),
+                )
+            )
     return grps
 
 def generate_extensions_reverse(grp,structs):
