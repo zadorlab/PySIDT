@@ -2394,6 +2394,106 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=Non
             )
     return grps
 
+def generalize_internal_new_bond_extensions(grp, i, j, n_strucs_max, basename, r_bonds, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generalizes extensions by removing the shortest path (atoms/bonds)
+    between two atoms indexed i,j that already exist in the group
+    """
+    # cython.declare(newgrp=Group)
+    
+    paths = find_shortest_paths(grp.atoms[i],grp.atoms[j])
+    
+    if paths is None:
+        return []
+    
+    atom_type_i = grp.atoms[i].atomtype
+    atom_type_j = grp.atoms[j].atomtype
+
+    if len(atom_type_i) > 1:
+        atom_type_i_str = ""
+        label_list_i = [k.label for k in atom_type_i]
+        for k in sorted(label_list_i):
+            atom_type_i_str += k
+    elif len(atom_type_i) == 0:
+        atom_type_i_str = ""
+    else:
+        atom_type_i_str = atom_type_i[0].label
+    if len(atom_type_j) > 1:
+        atom_type_j_str = ""
+        label_list_j = [k.label for k in atom_type_j]
+        for p in sorted(label_list_j):
+            atom_type_j_str += p
+    elif len(atom_type_j) == 0:
+        atom_type_j_str = ""
+    else:
+        atom_type_j_str = atom_type_j[0].label
+    
+    grps = []
+    for path in paths:
+        newgrp = deepcopy(grp)
+        tail_atom = newgrp.atoms[i]
+        head_atom = newgrp.atoms[j]
+        if len(path) == 2: #just remove bond
+            newgrp.remove_bond(newgrp.atoms[i],newgrp.atoms[j])
+        else: #remove internal atoms and bonds
+            for a in path:
+                if a is not tail_atom and a is not head_atom:
+                    newgrp.remove_atom(a)
+        
+        if len(newgrp.split()) > n_strucs_max: #removing that path creates too many separate structures
+            continue
+        
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    newgrp.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+
+            grps.append((
+                newgrp,
+                None,
+                basename
+                + "_Int-"
+                + str(i + 1)
+                + atom_type_i_str
+                + "-"
+                + str(j + 1)
+                + atom_type_j_str
+                + "-Br"+str(len(path)),
+                "genRemoveBridgeExt",
+                (i, j),
+                delta_v,
+                delta_unc,
+            ))
+        else:
+            grps.append((
+                newgrp,
+                None,
+                basename
+                + "_Int-"
+                + str(i + 1)
+                + atom_type_i_str
+                + "-"
+                + str(j + 1)
+                + atom_type_j_str
+                + "-Br"+str(len(path)),
+                "genRemoveBridgeExt",
+                (i, j),
+            ))
+    
+    return grps
+
 def generate_extensions_reverse(grp,structs):
     """
     This function is designed to generate extensions by reverse engineering the structures being split rather than extending the original group
