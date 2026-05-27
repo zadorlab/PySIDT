@@ -1052,17 +1052,19 @@ def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_del
                     delta_v += v - v_init
                     delta_unc += np.sqrt(unc**2 - unc_init**2)
             
-                grps.append(
-                (
-                    g,
-                    grpc,
-                    basename + "_" + str(i + 1) + old_atom_type_str + "->" + "".join([x.label for x in item]),
-                    "atomExt",
-                    (i,),
-                    delta_v,
-                    delta_unc,
-                )
+            g.clear_labeled_atoms()
+            
+            grps.append(
+            (
+                g,
+                grpc,
+                basename + "_" + str(i + 1) + old_atom_type_str + "->" + "".join([x.label for x in item]),
+                "atomExt",
+                (i,),
+                delta_v,
+                delta_unc,
             )
+        )
                 
         else:
             grps.append(
