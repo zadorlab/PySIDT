@@ -2431,6 +2431,7 @@ def generalize_internal_new_bond_extensions(grp, i, j, n_strucs_max, basename, r
     grps = []
     for path in paths:
         newgrp = deepcopy(grp)
+        mapping = {a:newgrp.atoms[q] for q,a in enumerate(grp.atoms)}
         tail_atom = newgrp.atoms[i]
         head_atom = newgrp.atoms[j]
         if len(path) == 2: #just remove bond
@@ -2449,16 +2450,29 @@ def generalize_internal_new_bond_extensions(grp, i, j, n_strucs_max, basename, r
             delta_v = None
             delta_unc = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                missing = False
                 for k, a in enumerate(decomp.atoms):
-                    newgrp.atoms[k].label = a.label
+                    if grp.atoms[k] in mapping.keys():                
+                        mapping[grp.atoms[k]].label = a.label
+                    elif a.label not in ["","*S"]: #we cannot map an important label for this decomposition
+                        missing = True
+                        break
+                
                 v_init, unc_init = d
-                v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+                
+                if missing:
+                    v, unc = 0.0,0.0
+                else:
+                    v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+
                 if delta_v is None:
                     delta_v = v - v_init
                     delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                
+            newgrp.clear_labeled_atoms()
 
             grps.append((
                 newgrp,
