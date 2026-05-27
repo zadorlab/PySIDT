@@ -1141,6 +1141,8 @@ def generalize_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_
                     delta_unc += -np.sqrt(unc**2 - unc_init**2)
                 else:
                     delta_unc += np.sqrt(unc**2 - unc_init**2)
+        
+        g.clear_labeled_atoms()
 
         grps.append(
             (
@@ -1209,6 +1211,9 @@ def generalize_ring_extensions(grp, i, basename, tree=None, estimate_delta=False
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+        g.clear_labeled_atoms()
+        
         grps.append(
             (
                 g,
@@ -1291,6 +1296,9 @@ def generalize_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None,
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,), delta_v, delta_unc))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,)))
@@ -1355,6 +1363,9 @@ def generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,), delta_v, delta_unc))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,)))
@@ -1419,6 +1430,9 @@ def generalize_site_extensions(grp, i, basename, r_site, r_site_full, tree=None,
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,), delta_v, delta_unc))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,)))
@@ -1483,6 +1497,9 @@ def generalize_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tr
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,), delta_v, delta_unc))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,)))
@@ -1547,6 +1564,9 @@ def generalize_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+        g.clear_labeled_atoms()
+        
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,), delta_v, delta_unc))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,)))
@@ -1627,6 +1647,9 @@ def generalize_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=
                     delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
                 else:
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
         grps.append(
             (
                 g,
@@ -1696,6 +1719,9 @@ def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, a
             else:
                 delta_v += v - v_init
                 delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                
+        g.clear_labeled_atoms()
+        
         grps.append(
             (
                 g,
@@ -1776,6 +1802,9 @@ def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, es
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            
+            g.clear_labeled_atoms()
+            
             grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,), delta_v, delta_unc))
         else:
             grps.append(
@@ -1839,6 +1868,9 @@ def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_fu
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+            g.clear_labeled_atoms()
+            
             grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,), delta_v, delta_unc))
         else:
             grps.append(
@@ -1908,6 +1940,9 @@ def specify_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, es
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+            g.clear_labeled_atoms()
+            
             grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,), delta_v, delta_unc))
         else:
             grps.append(
@@ -1978,6 +2013,9 @@ def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            
+            g.clear_labeled_atoms()
+            
             grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]), "morphExt", (i,), delta_v, delta_unc))
         else:
             grps.append(
@@ -2047,6 +2085,9 @@ def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=No
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            
+            g.clear_labeled_atoms()
+            
             grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,), delta_v, delta_unc))
         else:
             grps.append(
@@ -2118,6 +2159,8 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
 
+            newgrp.clear_labeled_atoms()
+            
             return [
                 (
                     newgrp,
@@ -2265,6 +2308,9 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            
+            newgrp.clear_labeled_atoms()
+            
             grps.append(
                 (
                     newgrp,
@@ -2361,6 +2407,9 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=Non
                 else:
                     delta_v += v - v_init
                     delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+            g.clear_labeled_atoms()
+            
             grps.append(
                 (
                     g,
