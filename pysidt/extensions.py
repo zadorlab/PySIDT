@@ -2073,16 +2073,13 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
     if pathlen is None and n_strucs_min == len(grp.split()): #internal bridge will reduce below minimum number of independent structures
         return []
     
-    label_list = []
-        
     atom_type_i = grp.atoms[i].atomtype
     atom_type_j = grp.atoms[j].atomtype
 
     if len(atom_type_i) > 1:
         atom_type_i_str = ""
-        for k in atom_type_i:
-            label_list.append(k.label)
-        for k in sorted(label_list):
+        label_list_i = [k.label for k in atom_type_i]
+        for k in sorted(label_list_i):
             atom_type_i_str += k
     elif len(atom_type_i) == 0:
         atom_type_i_str = ""
@@ -2090,9 +2087,8 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
         atom_type_i_str = atom_type_i[0].label
     if len(atom_type_j) > 1:
         atom_type_j_str = ""
-        for k in atom_type_j:
-            label_list.append(k.label)
-        for p in sorted(label_list):
+        label_list_j = [k.label for k in atom_type_j]
+        for p in sorted(label_list_j):
             atom_type_j_str += p
     elif len(atom_type_j) == 0:
         atom_type_j_str = ""
