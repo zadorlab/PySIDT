@@ -2494,6 +2494,72 @@ def generalize_internal_new_bond_extensions(grp, i, j, n_strucs_max, basename, r
     
     return grps
 
+def generalize_external_new_bond_extensions(grp, i, basename, n_struc_max, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates extensions for the removal of an atom 
+    """
+    # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
+    label_list = []
+    grps = []
+    newgrp = deepcopy(grp)
+    
+    atom_type = newgrp.atoms[i].atomtype
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+        
+    newgrp.remove_atom(newgrp.atoms[i])
+    
+    if len(newgrp.split()) > n_struc_max: #removing that atom creates too many separate structures
+        return []
+        
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+        assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                newgrp.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        grps.append(
+            (
+                newgrp,
+                None,
+                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
+                "genAtomRemovalExt",
+                (len(newgrp.atoms) - 1,),
+                delta_v,
+                delta_unc,
+            )
+        )
+    else:
+        grps.append(
+            (
+                newgrp,
+                None,
+                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
+                "genAtomRemovalExt",
+                (len(newgrp.atoms) - 1,),
+            )
+        )
+    return grps
+
 def generate_extensions_reverse(grp,structs):
     """
     This function is designed to generate extensions by reverse engineering the structures being split rather than extending the original group
