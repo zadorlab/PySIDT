@@ -995,6 +995,261 @@ def get_extensions(
 
     return extents
 
+def get_extensions_for_generative_expansion(
+    grp,
+    tree,
+    decomposition,
+    r_full,
+    r_bonds_full=[1, 2, 3, 1.5, 4],
+    r_un_full=[0, 1, 2, 3],
+    r_site_full=[],
+    r_morph_full=[],
+    r_ncoord_full=[],
+    r_label=None,
+    r_lone_pairs_full=[],
+    basename="",
+    n_strucs_min=None,
+    n_strucs_max=None,
+    max_ring_gen_size=None,
+    decomposition_associated=None):
+    """
+    generate all possible extensions that can be applied to a group structure and roughly estimate changes in prediction
+    decomposition must preserve atom ordering relative to grp
+    decomposition_associated (f(decomp, i, j=None)): by default we choose "associated" decompositions to estimate based on whether a tagged atom in the decomposition would be changed, this allows "associated" decompositions to be specified by a different function of the decomposition and the atom indexes 
+    """
+
+    if n_strucs_min is None:
+        n_strucs_min = len(grp.split())
+        
+    if n_strucs_max is None:
+        n_strucs_max = len(grp.split())
+
+    if isinstance(r_full[0],list):
+        r = [x for y in r_full for x in y]
+    else:
+        r = r_full[:]
+    
+    if r_bonds_full:
+        if isinstance(r_bonds_full[0],list):
+            r_bonds = [x for y in r_bonds_full for x in y]
+        else:
+            r_bonds = r_bonds_full[:]
+    
+    if r_un_full:
+        if isinstance(r_un_full[0],list):
+            r_un = [x for y in r_un_full for x in y]
+        else:
+            r_un = r_un_full[:]
+    
+    if r_lone_pairs_full:
+        if isinstance(r_lone_pairs_full[0],list):
+            r_lone_pairs = [x for y in r_lone_pairs_full for x in y]
+        else:
+            r_lone_pairs = r_lone_pairs_full[:]
+            
+    if r_site_full:
+        if isinstance(r_site_full[0],list):
+            r_site = [x for y in r_site_full for x in y]
+        else:
+            r_site = r_site_full[:]
+    
+    if r_morph_full:
+        if isinstance(r_morph_full[0],list):
+            r_morph = [x for y in r_morph_full for x in y]
+        else:
+            r_morph = r_morph_full[:]
+    
+    if r_ncoord_full:
+        if isinstance(r_ncoord_full[0],list):
+            r_ncoord = [x for y in r_ncoord_full for x in y]
+        else:
+            r_ncoord = r_ncoord_full[:]
+    
+    if r_label is None or r_label == []:
+        r_label = ['']
+    
+    # generate appropriate r and r!H
+    if r is None:
+        r = bde_elements  # set of possible r elements/atoms
+        r = [ATOMTYPES[x] for x in r]
+
+    if ATOMTYPES["X"] in r and ATOMTYPES["H"] in r:
+        RxnH = r[:]
+        RxnH.remove(ATOMTYPES["H"])
+        R = r[:]
+        R.remove(ATOMTYPES["X"])
+        RnH = R[:]
+        RnH.remove(ATOMTYPES["H"])
+    elif ATOMTYPES["H"] in r:
+        R = r[:]
+        RnH = R[:]
+        RnH.remove(ATOMTYPES["H"])
+        RxnH = R[:]
+        RxnH.remove(ATOMTYPES["H"])
+    elif ATOMTYPES["X"] in r:
+        RxnH = r[:]
+        R = r[:]
+        R.remove(ATOMTYPES["X"])
+        RnH = R[:]
+    else:
+        R = r[:]
+        RnH = r[:]
+        RxnH = r[:]
+
+    
+    decomps = decomposition(grp)
+    assoc_decomposition_init_value_unc_dict = {decomp: evaluate_single(tree, decomp, estimate_uncertainty=True) for decomp in decomps}
+    
+    atoms = grp.atoms
+    
+    extents = []
+    
+    for i, atm in enumerate(atoms):
+        
+        #find decompositions impacted most by changing this atom and estimate value and uncertainty
+        assoc_decomposition_init_i = {decomp:vunc for decomp,vunc in assoc_decomposition_init_value_unc_dict.items() if (decomposition_associated is not None and decomposition_associated(decomp, i)) or (decomposition_associated is None and decomp.atoms[i].label not in ["","*S"])}
+
+        typ = atm.atomtype
+        
+        if len(typ) == 1:
+            if typ[0].label == "R":
+                extents.extend(
+                    specify_atom_extensions(grp, i, basename, R, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                )  # specify types of atoms
+            elif typ[0].label == "R!H":
+                extents.extend(specify_atom_extensions(grp, i, basename, RnH, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+            elif typ[0].label == "Rx":
+                extents.extend(specify_atom_extensions(grp, i, basename, r, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+            elif typ[0].label == "Rx!H":
+                extents.extend(specify_atom_extensions(grp, i, basename, RxnH, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+        else:
+            extents.extend(specify_atom_extensions(grp, i, basename, typ, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+            if len(typ) < len(r_full):
+                extents.extend(generalize_atom_extensions(grp, i, basename, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+        
+        if r_un_full:
+            if len(atm.radical_electrons) != 1:
+                if len(atm.radical_electrons) == 0:
+                    extents.extend(
+                        specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    )
+                else:
+                    extents.extend(
+                        specify_unpaired_extensions(
+                            grp, i, basename, atm.radical_electrons, r_un_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
+                        )
+                    )
+            if len(atm.radical_electrons) != 0 and len(atm.radical_electrons) < len(r_un_full):
+                extents.extend(
+                    generalize_unpaired_extensions(grp, i, basename, r_un_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                )
+
+        if r_lone_pairs_full:
+            if len(atm.lone_pairs) != 1:
+                if len(atm.lone_pairs) == 0:
+                    extents.extend(
+                        specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    )
+                else:
+                    extents.extend(
+                        specify_lone_pair_extensions(
+                            grp, i, basename, atm.lone_pairs, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
+                        )
+                    )
+            if len(atm.lone_pairs) != 0 and len(atm.lone_pairs) < len(r_lone_pairs_full):
+                extents.extend(
+                    generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                )
+            
+        if r_site_full:
+            if len(atm.site) != 1:
+                if len(atm.site) == 0:
+                    extents.extend(
+                        specify_site_extensions(grp, i, basename, r_site, r_site_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    )
+                else:
+                    extents.extend(
+                        specify_site_extensions(grp, i, basename, atm.site, r_site_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    )
+            if len(atm.site) != 0 and len(atm.site) < len(r_site_full):
+                extents.extend(
+                    generalize_site_extensions(grp, i, basename, r_site_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                )
+                
+        if r_morph_full:
+            if len(atm.morphology) != 1:
+                if len(atm.morphology) == 0:
+                    extents.extend(
+                        specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    )
+                else:
+                    extents.extend(
+                        specify_morphology_extensions(
+                            grp, i, basename, atm.morphology, r_morph_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
+                        )
+                    )
+            if len(atm.morphology) != 0 and len(atm.morphology) < len(r_morph_full):
+                extents.extend(
+                    generalize_morphology_extensions(grp, i, basename, r_morph_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                )
+                
+        if r_ncoord_full:
+            if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) != 1:
+                if "Ncoord" not in atm.props.keys() or len(atm.props["Ncoord"]) == 0:
+                    extents.extend(
+                        specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    )
+                else:
+                    extents.extend(
+                        specify_ncoord_extensions(
+                            grp, i, basename, atm.props["Ncoord"], r_ncoord_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
+                        )
+                    )
+            if "Ncoord" in atm.props.keys() and (len(atm.props["Ncoord"]) < len(r_ncoord_full)) and len(atm.props["Ncoord"]) != 0:
+                extents.extend(
+                    generalize_ncoord_extensions(grp, i, basename, r_ncoord_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                )
+                
+        if "inRing" not in atm.props:
+            extents.extend(specify_ring_extensions(grp, i, basename, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+        else:
+            extents.extend(generalize_ring_extensions(grp, i, basename, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
+            
+        extents.extend(
+            specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+        )
+        
+        extents.extend(
+            generalize_remove_atom_extensions(grp, i, basename, n_struc_max=n_strucs_max, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+        )
+        
+        for j, atm2 in enumerate(atoms):
+            assoc_decomposition_init_i_j = {decomp:vunc for decomp,vunc in assoc_decomposition_init_value_unc_dict.items() if (decomposition_associated is not None and decomposition_associated(decomp, i, j)) or (decomposition_associated is None and (decomp.atoms[i].label not in ["","*S"] or decomp.atoms[j].label not in ["","*S"]))}
+            if j <= i:
+                if grp.has_bond(atm, atm2):
+                    bd = grp.get_bond(atm, atm2)
+                    if len(bd.order) > 1:
+                        extents.extend(
+                            specify_bond_extensions(grp, i, j, basename, bd.order, r_bonds_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
+                        )
+                
+                extents.extend(
+                    specify_internal_new_bond_extensions(
+                        grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j
+                    )
+                )
+                
+                extents.extend(
+                    generalize_remove_bridge_extensions(grp, i, j, n_strucs_max=n_strucs_max, basename=basename, r_bonds=r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
+                )
+
+
+    for ex in extents:
+        ex[0].update_fingerprint()
+        if ex[1]:
+            ex[1].update_fingerprint()
+
+    return extents
 
 def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
