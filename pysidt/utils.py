@@ -65,35 +65,35 @@ def get_local_atom_configuration_number(valence_map):
     return valence_to_config_number
 
 def evaluate_single(tree, mol, trace=False, estimate_uncertainty=False):
-        """
-        Evaluate tree for a given possibly labeled mol
-        """
-        children = tree.root.children
-        node = tree.root
+    """
+    Evaluate tree for a given possibly labeled mol
+    """
+    children = tree.root.children
+    node = tree.root
 
-        while children:
-            for child in children:
-                if mol.is_subgraph_isomorphic(
-                    child.group, generate_initial_map=True, save_order=True
-                ):
-                    children = child.children
-                    node = child
-                    break
-            else:
-                if trace and estimate_uncertainty:
-                    return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
-                elif estimate_uncertainty:
-                    return node.rule.value, np.sqrt(node.rule.uncertainty)
-                elif trace:
-                    return node.rule.value, node.name
-                else:
-                    return node.rule.value
-
-        if trace and estimate_uncertainty:
-            return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
-        elif estimate_uncertainty:
-            return node.rule.value, np.sqrt(node.rule.uncertainty)
-        elif trace:
-            return node.rule.value, node.name
+    while children:
+        for child in children:
+            if mol.is_subgraph_isomorphic(
+                child.group, generate_initial_map=True, save_order=True
+            ):
+                children = child.children
+                node = child
+                break
         else:
-            return node.rule.value
+            if trace and estimate_uncertainty:
+                return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
+            elif estimate_uncertainty:
+                return node.rule.value, np.sqrt(node.rule.uncertainty)
+            elif trace:
+                return node.rule.value, node.name
+            else:
+                return node.rule.value
+
+    if trace and estimate_uncertainty:
+        return node.rule.value, np.sqrt(node.rule.uncertainty), node.name
+    elif estimate_uncertainty:
+        return node.rule.value, np.sqrt(node.rule.uncertainty)
+    elif trace:
+        return node.rule.value, node.name
+    else:
+        return node.rule.value
