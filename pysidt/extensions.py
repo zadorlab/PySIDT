@@ -2338,7 +2338,7 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
             )
     return grps
 
-def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the removal of an atom 
     """
