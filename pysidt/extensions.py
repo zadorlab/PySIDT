@@ -1079,7 +1079,6 @@ def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_del
 
     return grps
 
-
 def generalize_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for generalization (making less specific) of the type of atom defined by a given atomtype
@@ -1168,513 +1167,6 @@ def generalize_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_
 
     return grps
 
-
-def generalize_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for ring membership of a given atom.
-    """
-    grps = []
-    g = deepcopy(grp)
-    if "inRing" not in g.atoms[i].props:
-        return []
-    old_atom_type = g.atoms[i].atomtype
-    del g.atoms[i].props["inRing"]
-    grpc = None
-
-    if len(old_atom_type) > 1:
-        labelList = [k.label for k in old_atom_type]
-        old_atom_type_str = "".join(sorted(labelList))
-    elif len(old_atom_type) == 0:
-        old_atom_type_str = ""
-    else:
-        old_atom_type_str = old_atom_type[0].label
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ring generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for ring generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                    
-        g.clear_labeled_atoms()
-        
-        grps.append(
-            (
-                g,
-                grpc,
-                basename + "_" + str(i + 1) + old_atom_type_str + "->anyRing",
-                "ringGen",
-                (i,),
-                delta_v,
-                delta_unc,
-            )
-        )
-    else:
-        grps.append(
-            (
-                g,
-                grpc,
-                basename + "_" + str(i + 1) + old_atom_type_str + "->anyRing",
-                "ringGen",
-                (i,),
-            )
-        )
-
-    return grps
-
-
-def generalize_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for radical electron specification on a given atom.
-    """
-    grps = []
-    if isinstance(r_un_full[0], list):
-        for L in r_un_full:
-            if all(a in L for a in grp.atoms[i].radical_electrons):
-                if len(L) > len(grp.atoms[i].radical_electrons):
-                    r_gen = L
-                else:
-                    r_gen = r_un
-                break
-        else:
-            r_gen = r_un
-    else:
-        r_gen = r_un
-
-    g = deepcopy(grp)
-    grpc = None
-    g.atoms[i].radical_electrons = r_gen
-
-    atom_type = g.atoms[i].atomtype
-    label_list = []
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for unpaired generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for unpaired generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-        
-        g.clear_labeled_atoms()
-        
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,), delta_v, delta_unc))
-    else:
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,)))
-
-    return grps
-
-
-def generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for lone pair specification on a given atom.
-    """
-    grps = []
-    if isinstance(r_lone_pairs_full[0], list):
-        for L in r_lone_pairs_full:
-            if all(a in L for a in grp.atoms[i].lone_pairs):
-                if len(L) > len(grp.atoms[i].lone_pairs):
-                    r_gen = L
-                else:
-                    r_gen = r_lone_pairs
-                break
-        else:
-            r_gen = r_lone_pairs
-    else:
-        r_gen = r_lone_pairs
-
-    g = deepcopy(grp)
-    grpc = None
-    g.atoms[i].lone_pairs = r_gen
-
-    atom_type = g.atoms[i].atomtype
-    label_list = []
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for lone-pair generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for lone-pair generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-        
-        g.clear_labeled_atoms()
-        
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,), delta_v, delta_unc))
-    else:
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,)))
-
-    return grps
-
-
-def generalize_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for site specification on a given atom.
-    """
-    grps = []
-    if isinstance(r_site_full[0], list):
-        for L in r_site_full:
-            if all(a in L for a in grp.atoms[i].site):
-                if len(L) > len(grp.atoms[i].site):
-                    r_gen = L
-                else:
-                    r_gen = r_site
-                break
-        else:
-            r_gen = r_site
-    else:
-        r_gen = r_site
-
-    g = deepcopy(grp)
-    grpc = None
-    g.atoms[i].site = r_gen
-
-    atom_type = g.atoms[i].atomtype
-    label_list = []
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for site generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for site generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-        
-        g.clear_labeled_atoms()
-        
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,), delta_v, delta_unc))
-    else:
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,)))
-
-    return grps
-
-
-def generalize_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for morphology specification on a given atom.
-    """
-    grps = []
-    if isinstance(r_morph_full[0], list):
-        for L in r_morph_full:
-            if all(a in L for a in grp.atoms[i].morphology):
-                if len(L) > len(grp.atoms[i].morphology):
-                    r_gen = L
-                else:
-                    r_gen = r_morph
-                break
-        else:
-            r_gen = r_morph
-    else:
-        r_gen = r_morph
-
-    g = deepcopy(grp)
-    grpc = None
-    g.atoms[i].morphology = r_gen
-
-    atom_type = g.atoms[i].atomtype
-    label_list = []
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for morphology generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for morphology generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-        
-        g.clear_labeled_atoms()
-        
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,), delta_v, delta_unc))
-    else:
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,)))
-
-    return grps
-
-
-def generalize_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for coordination number specification on a given atom.
-    """
-    grps = []
-    if isinstance(r_ncoord_full[0], list):
-        for L in r_ncoord_full:
-            if all(a in L for a in grp.atoms[i].props.get("Ncoord", [])):
-                if len(L) > len(grp.atoms[i].props.get("Ncoord", [])):
-                    r_gen = L
-                else:
-                    r_gen = r_ncoord
-                break
-        else:
-            r_gen = r_ncoord
-    else:
-        r_gen = r_ncoord
-
-    g = deepcopy(grp)
-    grpc = None
-    g.atoms[i].props["Ncoord"] = r_gen
-
-    atom_type = g.atoms[i].atomtype
-    label_list = []
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ncoord generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for ncoord generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                    
-        g.clear_labeled_atoms()
-        
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,), delta_v, delta_unc))
-    else:
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,)))
-
-    return grps
-
-
-def generalize_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates generalizations for bond order specification for a given bond.
-    """
-    grps = []
-    Rbset = set(r_bonds)
-    if isinstance(r_bonds_full[0], list):
-        for L in r_bonds_full:
-            if all(a in L for a in grp.get_bond(grp.atoms[i], grp.atoms[j]).order):
-                if len(L) > len(grp.get_bond(grp.atoms[i], grp.atoms[j]).order):
-                    r_gen = L
-                else:
-                    r_gen = r_bonds
-                break
-        else:
-            r_gen = r_bonds
-    else:
-        r_gen = r_bonds
-
-    g = deepcopy(grp)
-    grpc = None
-    g.atoms[i].bonds[g.atoms[j]].order = r_gen
-    g.atoms[j].bonds[g.atoms[i]].order = r_gen
-
-    atom_type_i = g.atoms[i].atomtype
-    atom_type_j = g.atoms[j].atomtype
-    if len(atom_type_i) > 1:
-        atom_type_i_str = ""
-        label_list_i = [k.label for k in atom_type_i]
-        for p in sorted(label_list_i):
-            atom_type_i_str += p
-    elif len(atom_type_i) == 0:
-        atom_type_i_str = ""
-    else:
-        atom_type_i_str = atom_type_i[0].label
-
-    if len(atom_type_j) > 1:
-        atom_type_j_str = ""
-        label_list_j = [k.label for k in atom_type_j]
-        for p in sorted(label_list_j):
-            atom_type_j_str += p
-    elif len(atom_type_j) == 0:
-        atom_type_j_str = ""
-    else:
-        atom_type_j_str = atom_type_j[0].label
-
-    b = ""
-    for v in {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}.keys():
-        if any(abs(v - x) < 1e-4 for x in r_gen):
-            b += {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}[v]
-
-    if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond generalizations"
-        assert tree is not None, "Must provide tree to estimate delta values for bond generalizations"
-        delta_v = None
-        delta_unc = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-            for k, a in enumerate(decomp.atoms):
-                g.atoms[k].label = a.label
-            v_init, unc_init = d
-            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-            if delta_v is None:
-                delta_v = v - v_init
-                if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            else:
-                delta_v += v - v_init
-                if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-        
-        g.clear_labeled_atoms()
-        
-        grps.append(
-            (
-                g,
-                grpc,
-                basename + "_Sp-" + str(i + 1) + atom_type_i_str + b + str(j + 1) + atom_type_j_str,
-                "bondGen",
-                (i, j),
-                delta_v,
-                delta_unc,
-            )
-        )
-    else:
-        grps.append(
-            (
-                g,
-                grpc,
-                basename + "_Sp-" + str(i + 1) + atom_type_i_str + b + str(j + 1) + atom_type_j_str,
-                "bondGen",
-                (i, j),
-            )
-        )
-
-    return grps
-
-
 def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specifying if an atom is in a ring
@@ -1746,6 +1238,74 @@ def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, a
 
     return grps
 
+def generalize_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for ring membership of a given atom.
+    """
+    grps = []
+    g = deepcopy(grp)
+    if "inRing" not in g.atoms[i].props:
+        return []
+    old_atom_type = g.atoms[i].atomtype
+    del g.atoms[i].props["inRing"]
+    grpc = None
+
+    if len(old_atom_type) > 1:
+        labelList = [k.label for k in old_atom_type]
+        old_atom_type_str = "".join(sorted(labelList))
+    elif len(old_atom_type) == 0:
+        old_atom_type_str = ""
+    else:
+        old_atom_type_str = old_atom_type[0].label
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ring generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for ring generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+        g.clear_labeled_atoms()
+        
+        grps.append(
+            (
+                g,
+                grpc,
+                basename + "_" + str(i + 1) + old_atom_type_str + "->anyRing",
+                "ringGen",
+                (i,),
+                delta_v,
+                delta_unc,
+            )
+        )
+    else:
+        grps.append(
+            (
+                g,
+                grpc,
+                basename + "_" + str(i + 1) + old_atom_type_str + "->anyRing",
+                "ringGen",
+                (i,),
+            )
+        )
+
+    return grps
 
 def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
@@ -1813,6 +1373,73 @@ def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, es
 
     return grps
 
+
+def generalize_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for radical electron specification on a given atom.
+    """
+    grps = []
+    if isinstance(r_un_full[0], list):
+        for L in r_un_full:
+            if all(a in L for a in grp.atoms[i].radical_electrons):
+                if len(L) > len(grp.atoms[i].radical_electrons):
+                    r_gen = L
+                else:
+                    r_gen = r_un
+                break
+        else:
+            r_gen = r_un
+    else:
+        r_gen = r_un
+
+    g = deepcopy(grp)
+    grpc = None
+    g.atoms[i].radical_electrons = r_gen
+
+    atom_type = g.atoms[i].atomtype
+    label_list = []
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for unpaired generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for unpaired generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,), delta_v, delta_unc))
+    else:
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,)))
+
+    return grps
+
 def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of lone pairs on a given atom
@@ -1876,6 +1503,72 @@ def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_fu
             grps.append(
                 (g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,))
             )
+
+    return grps
+
+def generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for lone pair specification on a given atom.
+    """
+    grps = []
+    if isinstance(r_lone_pairs_full[0], list):
+        for L in r_lone_pairs_full:
+            if all(a in L for a in grp.atoms[i].lone_pairs):
+                if len(L) > len(grp.atoms[i].lone_pairs):
+                    r_gen = L
+                else:
+                    r_gen = r_lone_pairs
+                break
+        else:
+            r_gen = r_lone_pairs
+    else:
+        r_gen = r_lone_pairs
+
+    g = deepcopy(grp)
+    grpc = None
+    g.atoms[i].lone_pairs = r_gen
+
+    atom_type = g.atoms[i].atomtype
+    label_list = []
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for lone-pair generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for lone-pair generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,), delta_v, delta_unc))
+    else:
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,)))
 
     return grps
 
@@ -1951,6 +1644,71 @@ def specify_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, es
 
     return grps
 
+def generalize_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for site specification on a given atom.
+    """
+    grps = []
+    if isinstance(r_site_full[0], list):
+        for L in r_site_full:
+            if all(a in L for a in grp.atoms[i].site):
+                if len(L) > len(grp.atoms[i].site):
+                    r_gen = L
+                else:
+                    r_gen = r_site
+                break
+        else:
+            r_gen = r_site
+    else:
+        r_gen = r_site
+
+    g = deepcopy(grp)
+    grpc = None
+    g.atoms[i].site = r_gen
+
+    atom_type = g.atoms[i].atomtype
+    label_list = []
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for site generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for site generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,), delta_v, delta_unc))
+    else:
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,)))
+
+    return grps
 
 def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
@@ -2030,6 +1788,72 @@ def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=
 
     return grps
 
+def generalize_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for morphology specification on a given atom.
+    """
+    grps = []
+    if isinstance(r_morph_full[0], list):
+        for L in r_morph_full:
+            if all(a in L for a in grp.atoms[i].morphology):
+                if len(L) > len(grp.atoms[i].morphology):
+                    r_gen = L
+                else:
+                    r_gen = r_morph
+                break
+        else:
+            r_gen = r_morph
+    else:
+        r_gen = r_morph
+
+    g = deepcopy(grp)
+    grpc = None
+    g.atoms[i].morphology = r_gen
+
+    atom_type = g.atoms[i].atomtype
+    label_list = []
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for morphology generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for morphology generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,), delta_v, delta_unc))
+    else:
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,)))
+
+    return grps
+
 def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for specification of the number of electrons on a given atom
@@ -2093,6 +1917,72 @@ def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=No
             grps.append(
                 (g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,))
             )
+
+    return grps
+
+def generalize_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for coordination number specification on a given atom.
+    """
+    grps = []
+    if isinstance(r_ncoord_full[0], list):
+        for L in r_ncoord_full:
+            if all(a in L for a in grp.atoms[i].props.get("Ncoord", [])):
+                if len(L) > len(grp.atoms[i].props.get("Ncoord", [])):
+                    r_gen = L
+                else:
+                    r_gen = r_ncoord
+                break
+        else:
+            r_gen = r_ncoord
+    else:
+        r_gen = r_ncoord
+
+    g = deepcopy(grp)
+    grpc = None
+    g.atoms[i].props["Ncoord"] = r_gen
+
+    atom_type = g.atoms[i].atomtype
+    label_list = []
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ncoord generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for ncoord generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+        g.clear_labeled_atoms()
+        
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,), delta_v, delta_unc))
+    else:
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,)))
 
     return grps
 
@@ -2265,187 +2155,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
     
     return grps    
 
-def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates extensions for the creation of a bond (of undefined order) between
-    an atom and a new atom that is not H
-    """
-    # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
-    label_list = []
-    grps = []
-    for alabel in r_label:
-        ga = GroupAtom([ATOMTYPES["Rx!H"]])
-        ga.label = alabel
-        newgrp = deepcopy(grp)
-        newgrp.add_atom(ga)
-        j = newgrp.atoms.index(ga)
-        newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
-        atom_type = newgrp.atoms[i].atomtype
-        if len(atom_type) > 1:
-            atom_type_str = ""
-            for k in atom_type:
-                label_list.append(k.label)
-            for p in sorted(label_list):
-                atom_type_str += p
-        elif len(atom_type) == 0:
-            atom_type_str = ""
-        else:
-            atom_type_str = atom_type[0].label
-
-        if estimate_delta:
-            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
-            assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
-            delta_v = None
-            delta_unc = None
-            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-                for k, a in enumerate(decomp.atoms):
-                    newgrp.atoms[k].label = a.label
-                v_init, unc_init = d
-                v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
-                if delta_v is None:
-                    delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-            
-            newgrp.clear_labeled_atoms()
-            
-            grps.append(
-                (
-                    newgrp,
-                    None,
-                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
-                    "extNewBondExt",
-                    (len(newgrp.atoms) - 1,),
-                    delta_v,
-                    delta_unc,
-                )
-            )
-        else:
-            grps.append(
-                (
-                    newgrp,
-                    None,
-                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
-                    "extNewBondExt",
-                    (len(newgrp.atoms) - 1,),
-                )
-            )
-    return grps
-
-def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
-    """
-    generates extensions for the specification of bond order for a given bond
-    """
-    # cython.declare(grps=list, label_list=list, Rbset=set, bd=float, grp=Group, grpc=Group)
-    grps = []
-    label_list = []
-    Rbset = set(r_bonds)
-    bdict = {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}
-    bstrdict = {"S": 1, "D": 2, "T": 3, "B": 1.5, "Q": 4, "R": 0.05, "vdW": 0}
-    if isinstance(r_bonds_full[0],list):
-        r_spc_bonds_full = [[y for y in x if y in r_bonds] for x in r_bonds_full]
-        if len(r_spc_bonds_full) == 1:
-            r_spc_bonds_full = [[x] for x in r_spc_bonds_full[0]]
-        else:
-            r_spc_bonds_full += [[x] for x in sum(r_spc_bonds_full,[]) if [x] not in r_spc_bonds_full]
-    else:
-        r_spc_bonds_full = [[x] for x in r_bonds_full if x in r_bonds]
-    for bd in r_spc_bonds_full:
-        g = deepcopy(grp)
-        grpc = deepcopy(grp)
-        g.atoms[i].bonds[g.atoms[j]].order = bd
-        g.atoms[j].bonds[g.atoms[i]].order = bd
-        grpc.atoms[i].bonds[grpc.atoms[j]].order = list(Rbset - set(bd))
-        grpc.atoms[j].bonds[grpc.atoms[i]].order = list(Rbset - set(bd))
-
-        if len(list(Rbset - set(bd))) == 0:
-            grpc = None
-
-        atom_type_i = g.atoms[i].atomtype
-        atom_type_j = g.atoms[j].atomtype
-
-        if len(atom_type_i) > 1:
-            atom_type_i_str = ""
-            for k in atom_type_i:
-                label_list.append(k.label)
-            for p in sorted(label_list):
-                atom_type_i_str += p
-        elif len(atom_type_i) == 0:
-            atom_type_i_str = ""
-        else:
-            atom_type_i_str = atom_type_i[0].label
-        if len(atom_type_j) > 1:
-            atom_type_j_str = ""
-            for k in atom_type_j:
-                label_list.append(k.label)
-            for p in sorted(label_list):
-                atom_type_j_str += p
-        elif len(atom_type_j) == 0:
-            atom_type_j_str = ""
-        else:
-            atom_type_j_str = atom_type_j[0].label
-
-        b = ""
-        for v in bdict.keys():
-            if any(abs(v - x) < 1e-4 for x in bd):
-                b += bdict[v]
-        if estimate_delta:
-            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond extensions"
-            assert tree is not None, "Must provide tree to estimate delta values for bond extensions"
-            delta_v = None
-            delta_unc = None
-            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-                for k, a in enumerate(decomp.atoms):
-                    g.atoms[k].label = a.label
-                v_init, unc_init = d
-                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
-                if delta_v is None:
-                    delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                else:
-                    delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
-                    
-            g.clear_labeled_atoms()
-            
-            grps.append(
-                (
-                    g,
-                    grpc,
-                    basename
-                    + "_Sp-"
-                    + str(i + 1)
-                    + atom_type_i_str
-                    + b
-                    + str(j + 1)
-                    + atom_type_j_str,
-                    "bondExt",
-                    (i, j),
-                    delta_v,
-                    delta_unc,
-                )
-            )
-        else:
-            grps.append(
-                (
-                    g,
-                    grpc,
-                    basename
-                    + "_Sp-"
-                    + str(i + 1)
-                    + atom_type_i_str
-                    + b
-                    + str(j + 1)
-                    + atom_type_j_str,
-                    "bondExt",
-                    (i, j),
-                )
-            )
-    return grps
-
-def generalize_internal_new_bond_extensions(grp, i, j, n_strucs_max, basename, r_bonds, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bonds, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generalizes extensions by removing the shortest path (atoms/bonds)
     between two atoms indexed i,j that already exist in the group
@@ -2559,7 +2269,76 @@ def generalize_internal_new_bond_extensions(grp, i, j, n_strucs_max, basename, r
     
     return grps
 
-def generalize_external_new_bond_extensions(grp, i, basename, n_struc_max, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates extensions for the creation of a bond (of undefined order) between
+    an atom and a new atom that is not H
+    """
+    # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
+    label_list = []
+    grps = []
+    for alabel in r_label:
+        ga = GroupAtom([ATOMTYPES["Rx!H"]])
+        ga.label = alabel
+        newgrp = deepcopy(grp)
+        newgrp.add_atom(ga)
+        j = newgrp.atoms.index(ga)
+        newgrp.add_bond(GroupBond(newgrp.atoms[i], newgrp.atoms[j], r_bonds))
+        atom_type = newgrp.atoms[i].atomtype
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
+
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    newgrp.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            
+            newgrp.clear_labeled_atoms()
+            
+            grps.append(
+                (
+                    newgrp,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                    delta_v,
+                    delta_unc,
+                )
+            )
+        else:
+            grps.append(
+                (
+                    newgrp,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                )
+            )
+    return grps
+
+def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the removal of an atom 
     """
@@ -2637,6 +2416,218 @@ def generalize_external_new_bond_extensions(grp, i, basename, n_struc_max, r_bon
             )
         )
     return grps
+
+def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates extensions for the specification of bond order for a given bond
+    """
+    # cython.declare(grps=list, label_list=list, Rbset=set, bd=float, grp=Group, grpc=Group)
+    grps = []
+    label_list = []
+    Rbset = set(r_bonds)
+    bdict = {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}
+    bstrdict = {"S": 1, "D": 2, "T": 3, "B": 1.5, "Q": 4, "R": 0.05, "vdW": 0}
+    if isinstance(r_bonds_full[0],list):
+        r_spc_bonds_full = [[y for y in x if y in r_bonds] for x in r_bonds_full]
+        if len(r_spc_bonds_full) == 1:
+            r_spc_bonds_full = [[x] for x in r_spc_bonds_full[0]]
+        else:
+            r_spc_bonds_full += [[x] for x in sum(r_spc_bonds_full,[]) if [x] not in r_spc_bonds_full]
+    else:
+        r_spc_bonds_full = [[x] for x in r_bonds_full if x in r_bonds]
+    for bd in r_spc_bonds_full:
+        g = deepcopy(grp)
+        grpc = deepcopy(grp)
+        g.atoms[i].bonds[g.atoms[j]].order = bd
+        g.atoms[j].bonds[g.atoms[i]].order = bd
+        grpc.atoms[i].bonds[grpc.atoms[j]].order = list(Rbset - set(bd))
+        grpc.atoms[j].bonds[grpc.atoms[i]].order = list(Rbset - set(bd))
+
+        if len(list(Rbset - set(bd))) == 0:
+            grpc = None
+
+        atom_type_i = g.atoms[i].atomtype
+        atom_type_j = g.atoms[j].atomtype
+
+        if len(atom_type_i) > 1:
+            atom_type_i_str = ""
+            for k in atom_type_i:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_i_str += p
+        elif len(atom_type_i) == 0:
+            atom_type_i_str = ""
+        else:
+            atom_type_i_str = atom_type_i[0].label
+        if len(atom_type_j) > 1:
+            atom_type_j_str = ""
+            for k in atom_type_j:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_j_str += p
+        elif len(atom_type_j) == 0:
+            atom_type_j_str = ""
+        else:
+            atom_type_j_str = atom_type_j[0].label
+
+        b = ""
+        for v in bdict.keys():
+            if any(abs(v - x) < 1e-4 for x in bd):
+                b += bdict[v]
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for bond extensions"
+            delta_v = None
+            delta_unc = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    g.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_v += v - v_init
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    
+            g.clear_labeled_atoms()
+            
+            grps.append(
+                (
+                    g,
+                    grpc,
+                    basename
+                    + "_Sp-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + b
+                    + str(j + 1)
+                    + atom_type_j_str,
+                    "bondExt",
+                    (i, j),
+                    delta_v,
+                    delta_unc,
+                )
+            )
+        else:
+            grps.append(
+                (
+                    g,
+                    grpc,
+                    basename
+                    + "_Sp-"
+                    + str(i + 1)
+                    + atom_type_i_str
+                    + b
+                    + str(j + 1)
+                    + atom_type_j_str,
+                    "bondExt",
+                    (i, j),
+                )
+            )
+    return grps
+
+def generalize_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates generalizations for bond order specification for a given bond.
+    """
+    grps = []
+    Rbset = set(r_bonds)
+    if isinstance(r_bonds_full[0], list):
+        for L in r_bonds_full:
+            if all(a in L for a in grp.get_bond(grp.atoms[i], grp.atoms[j]).order):
+                if len(L) > len(grp.get_bond(grp.atoms[i], grp.atoms[j]).order):
+                    r_gen = L
+                else:
+                    r_gen = r_bonds
+                break
+        else:
+            r_gen = r_bonds
+    else:
+        r_gen = r_bonds
+
+    g = deepcopy(grp)
+    grpc = None
+    g.atoms[i].bonds[g.atoms[j]].order = r_gen
+    g.atoms[j].bonds[g.atoms[i]].order = r_gen
+
+    atom_type_i = g.atoms[i].atomtype
+    atom_type_j = g.atoms[j].atomtype
+    if len(atom_type_i) > 1:
+        atom_type_i_str = ""
+        label_list_i = [k.label for k in atom_type_i]
+        for p in sorted(label_list_i):
+            atom_type_i_str += p
+    elif len(atom_type_i) == 0:
+        atom_type_i_str = ""
+    else:
+        atom_type_i_str = atom_type_i[0].label
+
+    if len(atom_type_j) > 1:
+        atom_type_j_str = ""
+        label_list_j = [k.label for k in atom_type_j]
+        for p in sorted(label_list_j):
+            atom_type_j_str += p
+    elif len(atom_type_j) == 0:
+        atom_type_j_str = ""
+    else:
+        atom_type_j_str = atom_type_j[0].label
+
+    b = ""
+    for v in {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}.keys():
+        if any(abs(v - x) < 1e-4 for x in r_gen):
+            b += {1: "-", 2: "=", 3: "#", 1.5: "-=", 4: "$", 0.05: "..", 0: "--"}[v]
+
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond generalizations"
+        assert tree is not None, "Must provide tree to estimate delta values for bond generalizations"
+        delta_v = None
+        delta_unc = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for k, a in enumerate(decomp.atoms):
+                g.atoms[k].label = a.label
+            v_init, unc_init = d
+            v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                if unc < unc_init:
+                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+            else:
+                delta_v += v - v_init
+                if unc < unc_init:
+                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                else:
+                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+        
+        g.clear_labeled_atoms()
+        
+        grps.append(
+            (
+                g,
+                grpc,
+                basename + "_Sp-" + str(i + 1) + atom_type_i_str + b + str(j + 1) + atom_type_j_str,
+                "bondGen",
+                (i, j),
+                delta_v,
+                delta_unc,
+            )
+        )
+    else:
+        grps.append(
+            (
+                g,
+                grpc,
+                basename + "_Sp-" + str(i + 1) + atom_type_i_str + b + str(j + 1) + atom_type_j_str,
+                "bondGen",
+                (i, j),
+            )
+        )
+
+    return grps
+
 
 def generate_extensions_reverse(grp,structs):
     """
