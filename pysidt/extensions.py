@@ -2275,9 +2275,9 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
     an atom and a new atom that is not H
     """
     # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
-    label_list = []
     grps = []
     for alabel in r_label:
+        label_list = []
         ga = GroupAtom([ATOMTYPES["Rx!H"]])
         ga.label = alabel
         newgrp = deepcopy(grp)
