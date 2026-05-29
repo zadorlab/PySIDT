@@ -1,5 +1,7 @@
 import numpy as np
 from extensions import get_extensions_for_generative_expansion
+from utils import evaluate_single
+
 def sum_min_weighting(target_values):
     return (target_values - np.min(target_values)) / np.sum(target_values - np.min(target_values))
 
@@ -120,3 +122,139 @@ def take_generative_step(grp,
         new_uncertainty_delta = new_target_uncertainties - init_uncertainties
         extents[index] = extents[index][:-2] + (new_target_delta, new_uncertainty_delta)
     return extents[index]
+
+def generate_structure(grp,
+    target_function,
+    target_function_with_uncertainty,
+    tree,
+    decomposition,
+    weighting_function,
+    r_full,
+    r_bonds_full=[1, 2, 3, 1.5, 4],
+    r_un_full=[0, 1, 2, 3],
+    r_site_full=[],
+    r_morph_full=[],
+    r_ncoord_full=[],
+    r_label=None,
+    r_lone_pairs_full=[],
+    basename="",
+    n_strucs_min=None,
+    n_strucs_max=None,
+    max_ring_gen_size=None,
+    decomposition_associated=None,
+    fraction_to_compute_exactly=0.1,
+    iters_per_nstruct=20):
+    """
+    Generates
+    Args:
+        grp: Base group to extend.
+        target_function: Objective function f(x) maximized initially in generative expansion.
+        target_function_with_uncertainty: Objective function f(x, var_x) that penalizes uncertainty maximized in generative expansion.
+        tree: SIDT tree used to evaluate candidate extensions.
+        decomposition: Decomposition mapping that preserves atom ordering relative to grp.
+        weighting_function: Function that takes an array of target deltas and returns a probability distribution over them for selection of generative extensions.
+        r_full: Allowed atom types for new atoms; defaults to bond dissociation elements if None.
+        r_bonds_full (list, optional): Allowed bond orders for generated new bonds. Defaults to [1, 2, 3, 1.5, 4].
+        r_un_full (list, optional): Allowed unpaired electron counts for generated atoms. Defaults to [0, 1, 2, 3].
+        r_site_full (list, optional): Allowed site labels for generated atoms. Defaults to [].
+        r_morph_full (list, optional): Allowed morphological atom type values for generated atoms. Defaults to [].
+        r_ncoord_full (list, optional): Allowed coordination numbers for generated atoms. Defaults to [].
+        r_label (list, optional): Allowed atom labels for generated atoms. Defaults to None, which is treated as [''].
+        r_lone_pairs_full (list, optional): Allowed lone pair counts for generated atoms. Defaults to [].
+        basename (str, optional): Prefix for generated extension names. Defaults to "".
+        n_strucs_min (int, optional): Minimum number of fragments in generated structures. Defaults to None.
+        n_strucs_max (int, optional): Maximum number of fragments in generated structures. Defaults to None.
+        max_ring_gen_size (int, optional): Maximum size of generated rings for internal bond extensions. Defaults to None.
+        decomposition_associated (callable, optional): Function that selects whether a decomposition is associated with an atom change. Defaults to None.
+        fraction_to_compute_exactly (float, optional): Fraction of top candidates to evaluate exactly. Defaults to 0.1.
+        iters_per_nstruct (int, optional): Number of iterations to perform per structure in stage 2. Defaults to 20.
+    """
+    struct = grp.copy(deep=True)
+    name = basename
+    Nstruct = len(struct.atoms)
+    stage = 1
+    iter = 1
+    iter_stage_2 = 0
+    while True:
+        if stage == 1: #get up to the size scale of the system
+            struct, _, name, typename, tup, delta_v, delta_unc = take_generative_step(
+                struct,
+                target_function,
+                tree,
+                decomposition,
+                weighting_function,
+                r_full,
+                r_bonds_full=r_bonds_full,
+                r_un_full=r_un_full,
+                r_site_full=r_site_full,
+                r_morph_full=r_morph_full,
+                r_ncoord_full=r_ncoord_full,
+                r_label=r_label,
+                r_lone_pairs_full=r_lone_pairs_full,
+                basename=name,
+                n_strucs_min=n_strucs_min,
+                n_strucs_max=n_strucs_max,
+                max_ring_gen_size=max_ring_gen_size,
+                decomposition_associated=decomposition_associated,
+                fraction_to_compute_exactly=fraction_to_compute_exactly)
+            
+            if len(struct.atoms) < Nstruct:
+                Nstruct_stage_2 = Nstruct
+                stage = 2
+            Nstruct = len(struct.atoms)
+            
+        elif stage == 2: #generative refinement
+            struct, _, name, typename, tup, delta_v, delta_unc = take_generative_step(
+                struct,
+                target_function_with_uncertainty,
+                tree,
+                decomposition,
+                weighting_function,
+                r_full,
+                r_bonds_full=r_bonds_full,
+                r_un_full=r_un_full,
+                r_site_full=r_site_full,
+                r_morph_full=r_morph_full,
+                r_ncoord_full=r_ncoord_full,
+                r_label=r_label,
+                r_lone_pairs_full=r_lone_pairs_full,
+                basename=name,
+                n_strucs_min=n_strucs_min,
+                n_strucs_max=n_strucs_max,
+                max_ring_gen_size=max_ring_gen_size,
+                decomposition_associated=decomposition_associated,
+                fraction_to_compute_exactly=fraction_to_compute_exactly)
+            iter_stage_2 += 1
+            if iter_stage_2 > iters_per_nstruct * Nstruct_stage_2:
+                stage = 3
+        elif stage == 3: #make structure more specific until it is fully realized
+            try:
+                struct, _, name, typename, tup, delta_v, delta_unc = take_generative_step(
+                    struct,
+                    target_function_with_uncertainty,
+                    tree,
+                    decomposition,
+                    weighting_function,
+                    r_full,
+                    r_bonds_full=r_bonds_full,
+                    r_un_full=r_un_full,
+                    r_site_full=r_site_full,
+                    r_morph_full=r_morph_full,
+                    r_ncoord_full=r_ncoord_full,
+                    r_label=r_label,
+                    r_lone_pairs_full=r_lone_pairs_full,
+                    basename=name,
+                    n_strucs_min=n_strucs_min,
+                    n_strucs_max=n_strucs_max,
+                    max_ring_gen_size=max_ring_gen_size,
+                    decomposition_associated=decomposition_associated,
+                    fraction_to_compute_exactly=fraction_to_compute_exactly,
+                    specification_extensions_only=True) 
+            except ValueError:
+                break
+        else:
+            raise ValueError("Invalid stage value")
+        
+        iter += 1
+        
+        return struct
