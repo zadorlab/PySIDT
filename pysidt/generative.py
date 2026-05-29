@@ -1,10 +1,17 @@
 import numpy as np
 from extensions import get_extensions_for_generative_expansion
+def sum_min_weighting(target_values):
+    return (target_values - np.min(target_values)) / np.sum(target_values - np.min(target_values))
+
+def exp_neg_weighting(target_values):
+    exp_vals = np.exp(-target_values)
+    return exp_vals / np.sum(exp_vals)
 
 def take_generative_step(grp,
     target_function,
     tree,
     decomposition,
+    weighting_function,
     r_full,
     r_bonds_full=[1, 2, 3, 1.5, 4],
     r_un_full=[0, 1, 2, 3],
@@ -100,8 +107,7 @@ def take_generative_step(grp,
     target_deltas = rough_target_deltas
     target_deltas[exact_inds] = np.array(target_deltas_exact)
     
-    target_deltas -= np.min(target_deltas)
+    index = np.choice(range(len(target_deltas)), p=weighting_function(target_deltas))
     
-    index = np.choice(range(len(target_deltas)), p=target_deltas/np.sum(target_deltas))
     
     return extents[index]
