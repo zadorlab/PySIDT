@@ -18,7 +18,8 @@ def take_generative_step(grp,
     n_strucs_max=None,
     max_ring_gen_size=None,
     decomposition_associated=None,
-    fraction_to_compute_exactly=0.1):
+    fraction_to_compute_exactly=0.1,
+    specification_extensions_only=False):
     """Takes an expansion step in the generative process.
 
     Args:
@@ -40,7 +41,7 @@ def take_generative_step(grp,
         max_ring_gen_size (int, optional): Maximum size of generated rings for internal bond extensions. Defaults to None.
         decomposition_associated (callable, optional): Function that selects whether a decomposition is associated with an atom change. Defaults to None.
         fraction_to_compute_exactly (float, optional): Fraction of top candidates to evaluate exactly. Defaults to 0.1.
-
+        specification_extensions_only (bool, optional): Whether to only consider specification extensions. Defaults to False.
     Returns:
         tuple: Selected extension tuple from get_extensions_for_generative_expansion.
 
@@ -50,22 +51,23 @@ def take_generative_step(grp,
     init_target = target_function(init_values, init_uncertainties)
     
     extents = get_extensions_for_generative_expansion(
-    grp,
-    tree,
-    decomposition,
-    r_full,
-    r_bonds_full=r_bonds_full,
-    r_un_full=r_un_full,
-    r_site_full=r_site_full,
-    r_morph_full=r_morph_full,
-    r_ncoord_full=r_ncoord_full,
-    r_label=r_label,
-    r_lone_pairs_full=r_lone_pairs_full,
-    basename=basename,
-    n_strucs_min=n_strucs_min,
-    n_strucs_max=n_strucs_max,
-    max_ring_gen_size=max_ring_gen_size,
-    decomposition_associated=decomposition_associated)
+        grp,
+        tree,
+        decomposition,
+        r_full,
+        r_bonds_full=r_bonds_full,
+        r_un_full=r_un_full,
+        r_site_full=r_site_full,
+        r_morph_full=r_morph_full,
+        r_ncoord_full=r_ncoord_full,
+        r_label=r_label,
+        r_lone_pairs_full=r_lone_pairs_full,
+        basename=basename,
+        n_strucs_min=n_strucs_min,
+        n_strucs_max=n_strucs_max,
+        max_ring_gen_size=max_ring_gen_size,
+        decomposition_associated=decomposition_associated,
+        specification_extensions_only=specification_extensions_only)
 
     if not extents:
         raise ValueError("No candidate extensions generated for the group")
