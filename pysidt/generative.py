@@ -93,21 +93,30 @@ def take_generative_step(grp,
     exact_inds = inds[:Nexact]
     
     target_deltas_exact = []
-
+    target_uncertainty_deltas_exact = []
     for i in exact_inds:
         ext = extents[i]
         grp = ext[0]
-        
         new_target_values, new_target_uncertainties = tree.evaluate(grp, estimate_uncertainty=True)
         new_target_delta = target_function(new_target_values,new_target_uncertainties) - init_target
         target_deltas_exact.append(new_target_delta)
+        target_uncertainty_deltas_exact.append(new_target_uncertainties - init_uncertainties)
         
     target_deltas_exact = np.array(target_deltas_exact)
+    target_uncertainty_deltas_exact = np.array(target_uncertainty_deltas_exact)
     
     target_deltas = rough_target_deltas
     target_deltas[exact_inds] = np.array(target_deltas_exact)
     
     index = np.choice(range(len(target_deltas)), p=weighting_function(target_deltas))
     
-    
+    if index in exact_inds:
+        eind = exact_inds.tolist().index(index)
+        extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
+        return extents[index]
+    else:
+        new_target_values, new_target_uncertainties = tree.evaluate(grp, estimate_uncertainty=True)
+        new_target_delta = target_function(new_target_values,new_target_uncertainties) - init_target
+        new_uncertainty_delta = new_target_uncertainties - init_uncertainties
+        extents[index] = extents[index][:-2] + (new_target_delta, new_uncertainty_delta)
     return extents[index]
