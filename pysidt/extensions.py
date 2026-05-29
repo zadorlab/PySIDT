@@ -1011,7 +1011,8 @@ def get_extensions_for_generative_expansion(
     n_strucs_min=None,
     n_strucs_max=None,
     max_ring_gen_size=None,
-    decomposition_associated=None):
+    decomposition_associated=None,
+    specification_extensions_only=False):
     """
     generate all possible extensions that can be applied to a group structure and roughly estimate changes in prediction
     decomposition must preserve atom ordering relative to grp
@@ -1124,7 +1125,7 @@ def get_extensions_for_generative_expansion(
                 extents.extend(specify_atom_extensions(grp, i, basename, RxnH, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
         else:
             extents.extend(specify_atom_extensions(grp, i, basename, typ, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
-            if len(typ) < len(r_full):
+            if not specification_extensions_only and len(typ) < len(r_full):
                 extents.extend(generalize_atom_extensions(grp, i, basename, r_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
         
         if r_un_full:
@@ -1139,7 +1140,7 @@ def get_extensions_for_generative_expansion(
                             grp, i, basename, atm.radical_electrons, r_un_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
                         )
                     )
-            if len(atm.radical_electrons) != 0 and len(atm.radical_electrons) < len(r_un_full):
+            if len(atm.radical_electrons) != 0 and len(atm.radical_electrons) < len(r_un_full) and not specification_extensions_only:
                 extents.extend(
                     generalize_unpaired_extensions(grp, i, basename, r_un_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                 )
@@ -1156,7 +1157,7 @@ def get_extensions_for_generative_expansion(
                             grp, i, basename, atm.lone_pairs, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
                         )
                     )
-            if len(atm.lone_pairs) != 0 and len(atm.lone_pairs) < len(r_lone_pairs_full):
+            if len(atm.lone_pairs) != 0 and len(atm.lone_pairs) < len(r_lone_pairs_full) and not specification_extensions_only:
                 extents.extend(
                     generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                 )
@@ -1171,7 +1172,7 @@ def get_extensions_for_generative_expansion(
                     extents.extend(
                         specify_site_extensions(grp, i, basename, atm.site, r_site_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                     )
-            if len(atm.site) != 0 and len(atm.site) < len(r_site_full):
+            if len(atm.site) != 0 and len(atm.site) < len(r_site_full) and not specification_extensions_only:
                 extents.extend(
                     generalize_site_extensions(grp, i, basename, r_site_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                 )
@@ -1188,7 +1189,7 @@ def get_extensions_for_generative_expansion(
                             grp, i, basename, atm.morphology, r_morph_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
                         )
                     )
-            if len(atm.morphology) != 0 and len(atm.morphology) < len(r_morph_full):
+            if len(atm.morphology) != 0 and len(atm.morphology) < len(r_morph_full) and not specification_extensions_only:
                 extents.extend(
                     generalize_morphology_extensions(grp, i, basename, r_morph_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                 )
@@ -1205,23 +1206,24 @@ def get_extensions_for_generative_expansion(
                             grp, i, basename, atm.props["Ncoord"], r_ncoord_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i
                         )
                     )
-            if "Ncoord" in atm.props.keys() and (len(atm.props["Ncoord"]) < len(r_ncoord_full)) and len(atm.props["Ncoord"]) != 0:
+            if "Ncoord" in atm.props.keys() and (len(atm.props["Ncoord"]) < len(r_ncoord_full)) and len(atm.props["Ncoord"]) != 0 and not specification_extensions_only:
                 extents.extend(
                     generalize_ncoord_extensions(grp, i, basename, r_ncoord_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                 )
                 
         if "inRing" not in atm.props:
             extents.extend(specify_ring_extensions(grp, i, basename, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
-        else:
+        elif not specification_extensions_only:
             extents.extend(generalize_ring_extensions(grp, i, basename, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i))
             
         extents.extend(
             specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
         )
         
-        extents.extend(
-            generalize_remove_atom_extensions(grp, i, basename, n_struc_max=n_strucs_max, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
-        )
+        if not specification_extensions_only:
+            extents.extend(
+                generalize_remove_atom_extensions(grp, i, basename, n_struc_max=n_strucs_max, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+            )
         
         for j, atm2 in enumerate(atoms):
             assoc_decomposition_init_i_j = {decomp:vunc for decomp,vunc in assoc_decomposition_init_value_unc_dict.items() if (decomposition_associated is not None and decomposition_associated(decomp, i, j)) or (decomposition_associated is None and (decomp.atoms[i].label not in ["","*S"] or decomp.atoms[j].label not in ["","*S"]))}
@@ -1232,16 +1234,17 @@ def get_extensions_for_generative_expansion(
                         extents.extend(
                             specify_bond_extensions(grp, i, j, basename, bd.order, r_bonds_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
                         )
-                
-                extents.extend(
-                    specify_internal_new_bond_extensions(
-                        grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j
+                if not specification_extensions_only:
+                    extents.extend(
+                        specify_internal_new_bond_extensions(
+                            grp, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j
+                        )
                     )
-                )
                 
-                extents.extend(
-                    generalize_remove_bridge_extensions(grp, i, j, n_strucs_max=n_strucs_max, basename=basename, r_bonds=r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
-                )
+                
+                    extents.extend(
+                        generalize_remove_bridge_extensions(grp, i, j, n_strucs_max=n_strucs_max, basename=basename, r_bonds=r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
+                    )
 
 
     for ex in extents:
