@@ -2601,6 +2601,8 @@ def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, 
     generates extensions for the removal of an atom 
     """
     # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
+    if len(grp.atoms) < 2:
+        return []
     label_list = []
     grps = []
     newgrp = deepcopy(grp)
