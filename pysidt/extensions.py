@@ -1159,7 +1159,7 @@ def get_extensions_for_generative_expansion(
                     )
             if len(atm.lone_pairs) != 0 and len(atm.lone_pairs) < len(r_lone_pairs_full) and not specification_extensions_only:
                 extents.extend(
-                    generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
+                    generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i)
                 )
             
         if r_site_full:
@@ -1243,7 +1243,7 @@ def get_extensions_for_generative_expansion(
                 
                 
                     extents.extend(
-                        generalize_remove_bridge_extensions(grp, i, j, n_strucs_max=n_strucs_max, basename=basename, r_bonds=r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
+                        generalize_remove_bridge_extensions(grp, i, j, n_strucs_max=n_strucs_max, basename=basename, r_bonds=r_bonds, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc_dict=assoc_decomposition_init_i_j)
                     )
 
 
@@ -2379,6 +2379,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                         delta_v += v - v_init
                         delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
 
+                newgrp.clear_labeled_atoms()
                 grps.append((
                     newgrp,
                     None,
@@ -2424,6 +2425,8 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
     
     if paths is None:
         return []
+    else:
+        paths = [[grp.atoms.index(a) for a in p] for p in paths] #convert paths from lists of atoms to lists of atom indices
     
     atom_type_i = grp.atoms[i].atomtype
     atom_type_j = grp.atoms[j].atomtype
@@ -2454,9 +2457,9 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
         tail_atom = newgrp.atoms[i]
         head_atom = newgrp.atoms[j]
         if len(path) == 2: #just remove bond
-            newgrp.remove_bond(newgrp.atoms[i],newgrp.atoms[j])
+            newgrp.remove_bond(newgrp.get_bond(newgrp.atoms[i], newgrp.atoms[j]))
         else: #remove internal atoms and bonds
-            for a in path:
+            for a in [newgrp.atoms[q] for q in path]:
                 if a is not tail_atom and a is not head_atom:
                     newgrp.remove_atom(a)
         
