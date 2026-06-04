@@ -1,4 +1,8 @@
 from pysidt.mol import *
+try:
+    from molecule.molecule import Molecule, Group, ATOMTYPES
+except:
+    from rmgpy.molecule import Molecule, Group, ATOMTYPES
 
 def atom_decomposition(mol):
     structs = []
@@ -11,23 +15,21 @@ def atom_decomposition(mol):
 
 def atom_decomposition_noH(mol):
     structs = []
-    for i in range(len(mol.atoms)):
-        if mol.atoms[i].is_hydrogen():
-            continue
-        m = mol.copy(deep=True)
-        m.atoms[i].label = "*"
-        structs.append(m)
-    return structs
+    if isinstance(mol, Group):
+        for i in range(len(mol.atoms)):
+            if all(a.equivalent(ATOMTYPES["H"]) for a in mol.atoms[i].atomtype):
+                continue
+            m = mol.copy(deep=True)
+            m.atoms[i].label = "*"
+            structs.append(m)
+    elif isinstance(mol, Molecule):
+        for i in range(len(mol.atoms)):
+            if mol.atoms[i].is_hydrogen():
+                continue
+            m = mol.copy(deep=True)
+            m.atoms[i].label = "*"
+            structs.append(m)
 
-
-def atom_decomposition_noH(mol):
-    structs = []
-    for i in range(len(mol.atoms)):
-        if mol.atoms[i].is_hydrogen():
-            continue
-        m = mol.copy(deep=True)
-        m.atoms[i].label = "*"
-        structs.append(m)
     return structs
 
 
