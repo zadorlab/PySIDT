@@ -1,4 +1,6 @@
 import math
+import numpy as np
+
 try:
     from molecule.molecule import Molecule
 except:
