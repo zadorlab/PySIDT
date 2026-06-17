@@ -1,12 +1,13 @@
 import numpy as np
-from extensions import get_extensions_for_generative_expansion
-from utils import evaluate_single
+import logging
+from pysidt.extensions import get_extensions_for_generative_expansion
+from pysidt.utils import evaluate_single
 
 def sum_min_weighting(target_values):
     return (target_values - np.min(target_values)) / np.sum(target_values - np.min(target_values))
 
-def exp_neg_weighting(target_values):
-    exp_vals = np.exp(-target_values)
+def exp_neg_weighting(target_values,b):
+    exp_vals = np.exp(-b * target_values)
     return exp_vals / np.sum(exp_vals)
 
 def take_generative_step(grp,
@@ -28,12 +29,15 @@ def take_generative_step(grp,
     max_ring_gen_size=None,
     decomposition_associated=None,
     fraction_to_compute_exactly=0.1,
-    specification_extensions_only=False):
+    specification_extensions_only=False,
+    skip_specification_zero_delta_extensions=False,
+    only_consider_objective_improving_extensions=False,
+    extension_weighting={"shrink":0.2, "growth":0.2, "genspec":0.1, "spec":0.5}):
     """Takes an expansion step in the generative process.
 
     Args:
         grp: Base group to extend.
-        target_function: Objective function f(x,var_x) maximized in generative expansion.
+        target_function: Objective function f(grp,x,var_x) maximized in generative expansion.
         tree: SIDT tree used to evaluate candidate extensions.
         decomposition: Decomposition mapping that preserves atom ordering relative to grp.
         r_full: Allowed atom types for new atoms; defaults to bond dissociation elements if None.
@@ -76,15 +80,22 @@ def take_generative_step(grp,
         n_strucs_max=n_strucs_max,
         max_ring_gen_size=max_ring_gen_size,
         decomposition_associated=decomposition_associated,
-        specification_extensions_only=specification_extensions_only)
-
+        specification_extensions_only=specification_extensions_only,
+)
     if not extents:
         raise ValueError("No candidate extensions generated for the group")
+
+    deltas = np.array([x[-2] for x in extents])
+    delta_vars = np.array([x[-1] for x in extents])
     
-    deltas = [x[-2] for x in extents]
-    delta_uncertainties = [x[-1] for x in extents]
-    
-    rough_target_deltas = np.array([target_function(init_values+delta, delta_uncertainties[i]) - init_target for delta in deltas])
+    rough_target_deltas = np.array([
+        target_function(extents[i][0],
+            init_values + delta,
+            np.sqrt(np.maximum(0.0, np.sqrt(init_uncertainties**2 + delta_vars[i]))),
+        )
+        - init_target
+        for i, delta in enumerate(deltas)
+    ])
     
     inds = np.argsort(rough_target_deltas)[::-1]
     
@@ -100,7 +111,7 @@ def take_generative_step(grp,
         ext = extents[i]
         grp = ext[0]
         new_target_values, new_target_uncertainties = tree.evaluate(grp, estimate_uncertainty=True)
-        new_target_delta = target_function(new_target_values,new_target_uncertainties) - init_target
+        new_target_delta = target_function(grp,new_target_values,new_target_uncertainties) - init_target
         target_deltas_exact.append(new_target_delta)
         target_uncertainty_deltas_exact.append(new_target_uncertainties - init_uncertainties)
         
@@ -110,22 +121,81 @@ def take_generative_step(grp,
     target_deltas = rough_target_deltas
     target_deltas[exact_inds] = np.array(target_deltas_exact)
     
-    index = np.choice(range(len(target_deltas)), p=weighting_function(target_deltas))
+    # print("Target deltas for candidate extensions:", target_deltas)
+    probs = weighting_function(target_deltas)
+
+    assert all(probs >= 0), "Weighting function returned negative probabilities"
+    
+    ext_classes = np.unique([x[-4] for x in extents])
+    ext_class_dict = {ext_class:0 for ext_class in ext_classes}
+    
+    is_nonnegative_target_delta = any(target_deltas > 0)
+    
+    shrink_inds = np.array([i for i,ext in enumerate(extents) if ext[-4] in ["genAtomRemovalExt", "genRemoveBridgeExt",]])
+    growth_inds = np.array([i for i,ext in enumerate(extents) if ext[-4] in ["extNewBondExt",  "intNewBridgeExt"]])
+    genspec_inds = np.array([i for i,ext in enumerate(extents) if ext[-4] not in ["atomGen","ringGen","elGen","lonepairGen","siteGen","morphGen","coordGen","bondGen"]])
+    spec_inds = np.array([i for i,ext in enumerate(extents) if ext[-4] not in ["atomExt","ringExt","elExt","lonepairExt","siteExt","morphExt","coordExt","bondExt"]])
+    
+    for i,ext in enumerate(extents):
+        if is_nonnegative_target_delta and only_consider_objective_improving_extensions and target_deltas[i] <= 0:
+            probs[i] = 0.0
+    
+    if len(shrink_inds) > 0:
+        shrink_sum = np.sum(probs[shrink_inds])
+        if shrink_sum > 0:
+            probs[shrink_inds] *= extension_weighting["shrink"]/np.sum(probs[shrink_inds])
+            assert np.isclose(np.sum(probs[shrink_inds]), extension_weighting["shrink"]), f"Shrink class probability sum {np.sum(probs[shrink_inds])} not close to target {extension_weighting['shrink']}"
+    if len(growth_inds) > 0:
+        growth_sum = np.sum(probs[growth_inds])
+        if growth_sum > 0:
+            probs[growth_inds] *= extension_weighting["growth"]/np.sum(probs[growth_inds])
+            assert np.isclose(np.sum(probs[growth_inds]), extension_weighting["growth"]), f"Growth class probability sum {np.sum(probs[growth_inds])} not close to target {extension_weighting['growth']}"
+    if len(genspec_inds) > 0:
+        genspec_sum = np.sum(probs[genspec_inds])
+        if genspec_sum > 0:
+            probs[genspec_inds] *= extension_weighting["genspec"]/np.sum(probs[genspec_inds])
+            assert np.isclose(np.sum(probs[genspec_inds]), extension_weighting["genspec"]), f"Genspec class probability sum {np.sum(probs[genspec_inds])} not close to target {extension_weighting['genspec']}"
+    if len(spec_inds) > 0:
+        spec_sum = np.sum(probs[spec_inds])
+        if spec_sum > 0:
+            probs[spec_inds] *= extension_weighting["spec"]/np.sum(probs[spec_inds])
+            assert np.isclose(np.sum(probs[spec_inds]), extension_weighting["spec"]), f"Spec class probability sum {np.sum(probs[spec_inds])} not close to target {extension_weighting['spec']}"
+
+    for i,ext in enumerate(extents):
+        ext_class_dict[ext[-4]] += probs[i]
+        
+    
+    logging.error("Probability distribution over extension classes before renormalization:")
+    logging.error(ext_class_dict)
+    
+    ext_class_dict = {ext_class:0 for ext_class in ext_classes}
+    probs = probs / np.sum(probs)
+    
+    for i,ext in enumerate(extents):
+        ext_class_dict[ext[-4]] += probs[i]
+        
+    
+    logging.error("Probability distribution over extension classes:")
+    logging.error(ext_class_dict)
+    
+    
+    index = np.random.choice(range(len(target_deltas)), p=probs)
+    
+    #logging.error(f"Probability: {probs[index]} Probability distribution: {probs}")
     
     if index in exact_inds:
         eind = exact_inds.tolist().index(index)
         extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
-        return extents[index]
+        return extents[index] + (new_target_values, new_target_uncertainties)
     else:
         new_target_values, new_target_uncertainties = tree.evaluate(grp, estimate_uncertainty=True)
-        new_target_delta = target_function(new_target_values,new_target_uncertainties) - init_target
+        new_target_delta = target_function(extents[index][0],new_target_values,new_target_uncertainties) - init_target
         new_uncertainty_delta = new_target_uncertainties - init_uncertainties
         extents[index] = extents[index][:-2] + (new_target_delta, new_uncertainty_delta)
-    return extents[index]
+    return extents[index] + (new_target_values, new_target_uncertainties, )
 
 def generate_structure(grp,
     target_function,
-    target_function_with_uncertainty,
     tree,
     decomposition,
     weighting_function,
