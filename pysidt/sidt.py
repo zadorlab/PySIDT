@@ -1753,7 +1753,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         node_uncertainties = ()
         if A.shape[1] != 1 and W is not None and len(self.datums) - len(nodes) + extra_dofs > 0:
             node_uncertainties = (
-                np.diag(scipy.linalg.pinvh((A.T @ W @ A).toarray()))
+                np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
                 * (self.data_delta**2).sum()
                 / ((len(self.datums) - len(nodes) + extra_dofs))
             )
@@ -1763,7 +1763,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             )
         elif A.shape[1] != 1 and len(self.datums) - len(nodes) + extra_dofs > 0:
             node_uncertainties = (
-                np.diag(scipy.linalg.pinvh((A.T @ A).toarray()))
+                np.diag(np.linalg.pinv((A.T @ A).toarray(),hermitian=True))
                 * (self.data_delta**2).sum()
                 / ((len(self.datums) - len(nodes) + extra_dofs))
             )
@@ -1775,7 +1775,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         elif A.shape[1] != 1 and W is not None:
             logging.warning("too few degrees of freedom cannot compute valid uncertainties")
             node_uncertainties = (
-                np.diag(scipy.linalg.pinvh((A.T @ W @ A).toarray()))
+                np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
                 * (self.data_delta**2).sum()
             )
             assert all(node_uncertainties >= 0), "Negative node uncertainty estimate, Node uncertainties: {}".format(node_uncertainties)
@@ -1787,12 +1787,12 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             logging.warning("too few degrees of freedom cannot compute valid uncertainties")
             if W is not None:
                 node_uncertainties = (
-                    np.diag(scipy.linalg.pinvh((A.T @ W @ A).toarray()))
+                    np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
                     * (self.data_delta**2).sum()
                 )
             else:
                 node_uncertainties = (
-                    np.diag(scipy.linalg.pinvh((A.T @ A).toarray()))
+                    np.diag(np.linalg.pinv((A.T @ A).toarray(),hermitian=True))
                     * (self.data_delta**2).sum()
                 )
             assert all(node_uncertainties >= 0), "Negative node uncertainty estimate, Node uncertainties: {}".format(node_uncertainties)
@@ -2297,17 +2297,17 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             
             if A.shape[1] != 1 and W is not None and len(self.datums) - len(nodes) + extra_dofs > 0:
                 node_uncertainties = (
-                    np.diag(scipy.linalg.pinvh((A.T @ W @ A).toarray()))
                     * (self.data_delta[:,m]**2).sum()
                     / ((len(self.datums) - len(nodes) + extra_dofs))
+                    np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
                 )
                 for k,node in enumerate(nodes):
                     self.node_uncertainties[node.name][m] = node_uncertainties[k]
             elif A.shape[1] != 1 and len(self.datums) - len(nodes) + extra_dofs > 0:
                 node_uncertainties = (
-                    np.diag(scipy.linalg.pinvh((A.T @ A).toarray()))
                     * (self.data_delta[:,m]**2).sum()
                     / ((len(self.datums) - len(nodes) + extra_dofs))
+                    np.diag(np.linalg.pinv((A.T @ A).toarray(),hermitian=True))
                 )
                 for k,node in enumerate(nodes):
                     self.node_uncertainties[node.name][m] = node_uncertainties[k]
@@ -2315,8 +2315,8 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             elif A.shape[1] != 1 and W is not None:
                 logging.warning("too few degrees of freedom cannot compute valid uncertainties")
                 node_uncertainties = (
-                    np.diag(scipy.linalg.pinvh((A.T @ W @ A).toarray()))
-                    * (self.data_delta[:,m]**2).sum()
+                    np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
+                    * (self.data_delta[m]**2).sum()
                 )
                 for k,node in enumerate(nodes):
                     self.node_uncertainties[node.name][m] = node_uncertainties[k]
@@ -2325,13 +2325,13 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
                 logging.warning("too few degrees of freedom cannot compute valid uncertainties")
                 if W is not None:
                     node_uncertainties = (
-                        np.diag(scipy.linalg.pinvh((A.T @ W @ A).toarray()))
-                        * (self.data_delta[:,m]**2).sum()
+                        np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
+                        * (self.data_delta[m]**2).sum()
                     )
                 else:
                     node_uncertainties = (
-                        np.diag(scipy.linalg.pinvh((A.T @ A).toarray()))
-                        * (self.data_delta[:,m]**2).sum()
+                        np.diag(np.linalg.pinv((A.T @ A).toarray(),hermitian=True))
+                        * (self.data_delta[m]**2).sum()
                     )
                 for k,node in enumerate(nodes):
                     self.node_uncertainties[node.name][m] = node_uncertainties[k]
