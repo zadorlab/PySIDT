@@ -1137,7 +1137,7 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
         if len(selectable_nodes) > 0:
             if self.weigh_node_selection_by_occurrence:
                 rulevals = [
-                    np.dot(node.rule.uncertainty,self.target_weights) * len(node.items)
+                    np.nansum(node.rule.uncertainty * self.target_weights) * len(node.items)
                     if len(node.items) > 1
                     and not (node.name in self.skip_nodes)
                     else 0.0
@@ -1145,7 +1145,7 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
                 ]
             else:
                 rulevals = [
-                    np.dot(node.rule.uncertainty,self.target_weights)
+                    np.nansum(node.rule.uncertainty * self.target_weights)
                     if len(node.items) > 1
                     and not (node.name in self.skip_nodes)
                     else 0.0
@@ -1173,11 +1173,11 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
         wsum = sum(d.weight for d in node.items)
         wsq_sum = sum(d.weight**2 for d in node.items)
         if (wsum - wsq_sum/wsum) > 1e-3: 
-            data_mean = sum(d.value * d.weight for d in node.items) / wsum
-            data_var = sum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+            data_mean = np.nansum(d.value * d.weight for d in node.items) / wsum
+            data_var = np.nansum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
         else: #primarily if weights are all 1.0
-            data_mean = np.mean(node_data)
-            data_var = np.var(node_data)
+            data_mean = np.nanmean(node_data)
+            data_var = np.nanvar(node_data)
         
         if n == 1:
             node.rule = Rule(value=node_data[0], uncertainty=None, num_data=n)
@@ -1188,12 +1188,21 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
         while n.rule is None:
             n = n.parent
         node.rule = n.rule
+        
         if node.rule.uncertainty is None:
             node.rule.uncertainty = node.parent.rule.uncertainty
+            
+        #search up the tree to fill in NaN values
+        for i in range(len(n.rule)):
+            n = node
+            while np.isnan(n.rule.value[i]):
+                n = n.parent
+            node.rule.value[i] = n.rule.value[i]  
+            node.rule.uncertainty[i] = n.rule.uncertainty[i]
 
         assert not isinstance(node.rule.value,float), (node.name,node_data)
         if not skip_val and self.validation_set:
-            val_error = [np.dot(self.evaluate(d.mol) - d.value, self.target_weights) for d in self.validation_set]
+            val_error = [np.nansum((self.evaluate(d.mol) - d.value)*self.target_weights) for d in self.validation_set]
             val_mae = np.mean(np.abs(np.array(val_error)))
             if val_mae < self.min_val_error:
                 self.min_val_error = val_mae
@@ -1221,15 +1230,15 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
             Lnew = len(new)
             Lcomp = len(comp)
             if Lnew  > 1 and Lcomp > 1:
-                val = np.std([np.dot(x.value,self.target_weights) for x in new]) * Lnew  + np.std(
-                [np.dot(x.value,self.target_weights) for x in comp]
+                val = np.std([np.nansum(x.value*self.target_weights) for x in new]) * Lnew  + np.std(
+                [np.nansum(x.value*self.target_weights) for x in comp]
             ) * Lcomp
             elif Lnew  == 1 and Lcomp == 1:
                 val = 0.0
             elif Lnew  == 1:
-                val = np.std([np.dot(x.value,self.target_weights) for x in comp]) * Lcomp
+                val = np.std([np.nansum(x.value*self.target_weights) for x in comp]) * Lcomp
             elif Lcomp == 1:
-                val = np.std([np.dot(x.value,self.target_weights) for x in new]) * Lnew 
+                val = np.std([np.nansum(x.value*self.target_weights) for x in new]) * Lnew 
             else: #did not split?
                 logging.error("group:")
                 logging.error(ext.to_adjacency_list())
@@ -2187,9 +2196,11 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
         
     def fit_rule(self, alpha, update_cache=True):
         max_depth = max([node.depth for node in self.nodes.values()])
-        ys = [np.array([datum.value[k] for datum in self.datums]) for k in range(self.target_num)]
-        preds = [np.zeros(len(self.datums)) for k in range(self.target_num)]
-        self.data_delta = np.zeros((len(self.datums),self.target_num))
+        value_indices = [np.array([i for i in range(len(self.datums)) if not np.isnan(self.datums[i].value[k])]) for k in range(self.target_num)]
+        self.value_indices = value_indices
+        ys = [np.array([self.datums[i].value[k] for i in value_indices[k]]) for k in range(self.target_num)]
+        preds = [np.zeros(len(value_indices[k])) for k in range(self.target_num)]
+        self.data_delta = [np.zeros(len(value_indices[k])) for k in range(self.target_num)]
         self.node_uncertainties = dict()
         weights = self.weights
         W = self.W
@@ -2211,10 +2222,22 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
 
                 self.cached_A_depth_dict[depth] = A
                 self.cached_nodes_depth_dict[depth] = nodes
-            
                             
                 for k in range(self.target_num):
                     
+                    if len(value_indices[k]) != len(self.datums):
+                        A = sp.lil_matrix((len(value_indices[k]), len(nodes)))
+                        for i,ind in enumerate(value_indices[k]):
+                            datum = self.datums[ind]
+                            for node in self.mol_node_maps[datum]["nodes"]:
+                                while node is not None:
+                                    if node in nodes:
+                                        j = nodes.index(node)
+                                        A[i, j] += 1.0
+                                    node = node.parent
+
+                        self.cached_A_depth_dict[(depth,k)] = A
+                        
                     if isinstance(alpha,(int,float,np.float64)):
                         a = alpha
                     else:
@@ -2237,7 +2260,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
                     preds[k] = A * clf.coef_
                     
                     self.cached_pred_depth_target_dict[(depth,k)] = preds[k]
-                    self.data_delta[:,k] = preds[k] - ys[k]
+                    self.data_delta[k] = preds[k] - ys[k]
         
                     for i, val in enumerate(clf.coef_):
                         if not nodes[i].rule:
@@ -2247,12 +2270,12 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
                 for k in range(self.target_num):
                     ys[k] -= preds[k]
                     preds[k] = self.cached_pred_depth_target_dict[(depth,k)]
-                    self.data_delta[:,k] = preds[k] - ys[k]
+                    self.data_delta[k] = preds[k] - ys[k]
         
-        logging.info("training MAE: {}".format(np.mean(np.abs(np.array(self.data_delta @ self.target_weights)))))
+        logging.info("training MAE: {}".format(np.mean(np.abs(np.array([x for k in range(self.target_num) for x in self.data_delta[k]*self.target_weights[k]])))))
 
         if self.validation_set:
-            val_error = [np.dot(self.evaluate(d.mol, estimate_uncertainty=False),self.target_weights) - np.dot(d.value,self.target_weights) for d in self.validation_set]
+            val_error = [np.nansum((self.evaluate(d.mol, estimate_uncertainty=False)-d.value)*self.target_weights) for d in self.validation_set]
             val_mae = np.mean(np.abs(np.array(val_error)))
             if val_mae < self.min_val_error:
                 self.min_val_error = val_mae
@@ -2284,30 +2307,39 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
         W = self.W
         
         for m in range(self.target_num):
+            if any((depth,m) in self.cached_A_depth_dict.keys() for depth in range(max_depth+1)):
+                logging.error([self.cached_A_depth_dict[(depth,m)].shape if (depth,m) in self.cached_A_depth_dict.keys() else self.cached_A_depth_dict[depth].shape for depth in range(max_depth+1)])
+                if max_depth > 0:
+                    A = sp.block_array([[self.cached_A_depth_dict[(depth,m)] if (depth,m) in self.cached_A_depth_dict.keys() else self.cached_A_depth_dict[depth] for depth in range(max_depth+1)]],format='csc')
+                else:
+                    if (0,m) in self.cached_A_depth_dict.keys():
+                        A = self.cached_A_depth_dict[(0,m)]
+                    else:
+                        A = self.cached_A_depth_dict[0]
+                        
+                Ndata = len(self.value_indices[m])
+            else:
+                Ndata = len(self.datums)
             
-            # generate matrix
-            y = np.array([datum.value[m] for datum in self.datums])
-            pred = sum([self.cached_pred_depth_target_dict[(depth,m)] for depth in range(max_depth+1)])
-    
             rules = [n.rule.value[m] for n in self.nodes.values()]
             rule_mean = abs(np.mean(rules))
             atol = rule_mean*rel_node_dof_tolerance
             self.abs_node_dof_tolerance = atol
             extra_dofs = len([n for n in rules if abs(n)<atol]) #count node rule values driven to zero by lasso
             
-            if A.shape[1] != 1 and W is not None and len(self.datums) - len(nodes) + extra_dofs > 0:
+            if A.shape[1] != 1 and W is not None and Ndata - len(nodes) + extra_dofs > 0:
                 node_uncertainties = (
-                    * (self.data_delta[:,m]**2).sum()
-                    / ((len(self.datums) - len(nodes) + extra_dofs))
                     np.diag(np.linalg.pinv((A.T @ W @ A).toarray(),hermitian=True))
+                    * (self.data_delta[m]**2).sum()
+                    / ((Ndata - len(nodes) + extra_dofs))
                 )
                 for k,node in enumerate(nodes):
                     self.node_uncertainties[node.name][m] = node_uncertainties[k]
-            elif A.shape[1] != 1 and len(self.datums) - len(nodes) + extra_dofs > 0:
+            elif A.shape[1] != 1 and Ndata - len(nodes) + extra_dofs > 0:
                 node_uncertainties = (
-                    * (self.data_delta[:,m]**2).sum()
-                    / ((len(self.datums) - len(nodes) + extra_dofs))
                     np.diag(np.linalg.pinv((A.T @ A).toarray(),hermitian=True))
+                    * (self.data_delta[m]**2).sum()
+                    / ((Ndata - len(nodes) + extra_dofs))
                 )
                 for k,node in enumerate(nodes):
                     self.node_uncertainties[node.name][m] = node_uncertainties[k]
@@ -2363,7 +2395,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
         if len(selectable_nodes) > num:
             if self.weigh_node_selection_by_occurrence:
                 rulevals = [
-                    np.dot(self.node_uncertainties[node.name],self.target_weights) * len(node.items)
+                    np.nansum(self.node_uncertainties[node.name]*self.target_weights) * len(node.items)
                     if len(node.items) > 1
                     and not (node.name in self.new_nodes)
                     and not (node.name in self.skip_nodes)
@@ -2372,7 +2404,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
                 ]
             else:
                 rulevals = [
-                    np.dot(self.node_uncertainties[node.name],self.target_weights)
+                    np.nansum(self.node_uncertainties[node.name]*self.target_weights)
                     if len(node.items) > 1
                     and not (node.name in self.new_nodes)
                     and not (node.name in self.skip_nodes)
@@ -2408,6 +2440,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             newval = 0.0
             compval = 0.0
             for i, datum in enumerate(self.datums):
+                value_inds = {m:np.searchsorted(self.value_indices[m],i) if i in self.value_indices[m] else None for m in range(self.target_num)}
                 for j, d in enumerate(self.mol_node_maps[datum]["mols"]):
                     if any(d is x for x in new):
                         v = self.node_uncertainties[
@@ -2418,7 +2451,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
                             ],self.target_weights)
                             for k in range(len(self.mol_node_maps[datum]["nodes"]))
                         )
-                        newval += np.dot(self.data_delta[i,:],v) / s
+                        newval += np.nansum(np.array([self.data_delta[m][value_inds[m]] if value_inds[m] is not None else np.NaN for m in range(self.target_num)])*v) / s
                     elif any(d is x for x in comp):
                         v = self.node_uncertainties[
                             self.mol_node_maps[datum]["nodes"][j].name] * self.target_weights
@@ -2428,7 +2461,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
                             ],self.target_weights)
                             for k in range(len(self.mol_node_maps[datum]["nodes"]))
                         )
-                        compval += np.dot(self.data_delta[i,:],v) / s
+                        compval += np.nansum(np.array([self.data_delta[m][value_inds[m]] if value_inds[m] is not None else np.NaN for m in range(self.target_num)])*v) / s
             val = abs(newval - compval)
             if val > maxval:
                 maxval = val
