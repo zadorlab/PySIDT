@@ -213,7 +213,8 @@ def generate_structure(grp,
     max_ring_gen_size=None,
     decomposition_associated=None,
     fraction_to_compute_exactly=0.1,
-    iters_per_nstruct=20):
+    iters_per_nstruct=20,
+    log_groups=False):
     """
     Generates
     Args:
@@ -245,9 +246,13 @@ def generate_structure(grp,
     stage = 1
     iter = 1
     iter_stage_2 = 0
+    if log_groups:
+        logged_groups = [struct]
     while True:
+        print(f"Iteration {iter}, Stage {stage}, Number of atoms: {len(struct.atoms)}")
+        print(struct.to_adjacency_list())
         if stage == 1: #get up to the size scale of the system
-            struct, _, name, typename, tup, delta_v, delta_unc = take_generative_step(
+            struct, _, name, typename, tup, delta_v, delta_var, target_values, target_uncertainties = take_generative_step(
                 struct,
                 target_function,
                 tree,
@@ -271,12 +276,13 @@ def generate_structure(grp,
             if len(struct.atoms) < Nstruct:
                 Nstruct_stage_2 = Nstruct
                 stage = 2
+                logging.info("Moving to stage 2 at structure size %d", Nstruct_stage_2)
             Nstruct = len(struct.atoms)
             
         elif stage == 2: #generative refinement
-            struct, _, name, typename, tup, delta_v, delta_unc = take_generative_step(
+            struct, _, name, typename, tup, delta_v, delta_var, target_values, target_uncertainties = take_generative_step(
                 struct,
-                target_function_with_uncertainty,
+                target_function,
                 tree,
                 decomposition,
                 weighting_function,
@@ -299,9 +305,9 @@ def generate_structure(grp,
                 stage = 3
         elif stage == 3: #make structure more specific until it is fully realized
             try:
-                struct, _, name, typename, tup, delta_v, delta_unc = take_generative_step(
+                struct, _, name, typename, tup, delta_v, delta_var, target_values, target_uncertainties = take_generative_step(
                     struct,
-                    target_function_with_uncertainty,
+                    target_function,
                     tree,
                     decomposition,
                     weighting_function,
@@ -324,7 +330,15 @@ def generate_structure(grp,
                 break
         else:
             raise ValueError("Invalid stage value")
-        
+        objective = target_function(target_values, target_uncertainties)
+        print(f"Selected extension: {typename}, {tup}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
+        if log_groups:
+            logged_groups.append(struct)
         iter += 1
         
+    if log_groups:
+        return struct, logged_groups
+    else:
         return struct
+    
+    
