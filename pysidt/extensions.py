@@ -1297,7 +1297,7 @@ def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_del
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for atom extensions"
             assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp,d in assoc_decomposition_init_value_unc_dict.items():
                 for i,a in enumerate(decomp.atoms):
                     g.atoms[i].label = a.label
@@ -1305,16 +1305,18 @@ def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_del
                 v,unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(unc**2 - unc_init**2)
+                    delta_var = unc**2 - unc_init**2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(unc**2 - unc_init**2)
+                    delta_var += unc**2 - unc_init**2
             
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
+                logging.error(f"delta_v: {delta_v}")
+                logging.error(f"delta_var: {delta_var}")
                 raise ValueError("NaN delta values computed in specify_atom_extensions: " + g.to_adjacency_list())
-            
+
             grps.append(
             (
                 g,
@@ -1323,7 +1325,7 @@ def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_del
                 "atomExt",
                 (i,),
                 delta_v,
-                delta_unc,
+                delta_var,
             )
         )
                 
@@ -1383,7 +1385,7 @@ def generalize_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for atom generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp,d in assoc_decomposition_init_value_unc_dict.items():
             for i,a in enumerate(decomp.atoms):
                 g.atoms[i].label = a.label
@@ -1392,19 +1394,19 @@ def generalize_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(unc**2 - unc_init**2)
+                    delta_var = unc**2 - unc_init**2
                 else:
-                    delta_unc = np.sqrt(unc**2 - unc_init**2)
+                    delta_var = unc**2 - unc_init**2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(unc**2 - unc_init**2)
+                    delta_var += unc**2 - unc_init**2
                 else:
-                    delta_unc += np.sqrt(unc**2 - unc_init**2)
+                    delta_var += unc**2 - unc_init**2
         
         g.clear_labeled_atoms()
 
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_atom_extensions")
             
         grps.append(
@@ -1415,7 +1417,7 @@ def generalize_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_
                 "atomGen",
                 (i,),
                 delta_v,
-                delta_unc,
+                delta_var,
             )
         )
     else:
@@ -1463,7 +1465,7 @@ def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, a
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ring extensions"
         assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -1471,14 +1473,14 @@ def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, a
             v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
             if delta_v is None:
                 delta_v = v - v_init
-                delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
-                delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                delta_var += unc ** 2 - unc_init ** 2
                 
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in specify_ring_extensions")
             
         grps.append(
@@ -1489,7 +1491,7 @@ def specify_ring_extensions(grp, i, basename, tree=None, estimate_delta=False, a
                 "ringExt",
                 (i,),
                 delta_v,
-                delta_unc,
+                delta_var,
             )
         )
     else:
@@ -1529,7 +1531,7 @@ def generalize_ring_extensions(grp, i, basename, tree=None, estimate_delta=False
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ring generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for ring generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -1538,19 +1540,19 @@ def generalize_ring_extensions(grp, i, basename, tree=None, estimate_delta=False
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                     
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_ring_extensions")
             
         grps.append(
@@ -1561,7 +1563,7 @@ def generalize_ring_extensions(grp, i, basename, tree=None, estimate_delta=False
                 "ringGen",
                 (i,),
                 delta_v,
-                delta_unc,
+                delta_var,
             )
         )
     else:
@@ -1620,7 +1622,7 @@ def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, es
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for unpaired extensions"
             assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     g.atoms[k].label = a.label
@@ -1628,16 +1630,16 @@ def specify_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None, es
                 v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
             
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_unpaired_extensions")
-            grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,), delta_v, delta_unc))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,), delta_v, delta_var))
         else:
             grps.append(
                 (g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in item]), "elExt", (i,))
@@ -1685,7 +1687,7 @@ def generalize_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None,
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for unpaired generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for unpaired generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -1694,21 +1696,21 @@ def generalize_unpaired_extensions(grp, i, basename, r_un, r_un_full, tree=None,
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
         
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_unpaired_extensions")
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,), delta_v, delta_unc))
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,), delta_v, delta_var))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-u" + "".join([str(x) for x in r_gen]), "elGen", (i,)))
 
@@ -1757,7 +1759,7 @@ def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_fu
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for lone-pair extensions"
             assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     g.atoms[k].label = a.label
@@ -1765,16 +1767,16 @@ def specify_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs_fu
                 v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                     
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_lone_pair_extensions")
-            grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,), delta_v, delta_unc))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,), delta_v, delta_var))
         else:
             grps.append(
                 (g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in item]), "lonepairExt", (i,))
@@ -1821,7 +1823,7 @@ def generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for lone-pair generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for lone-pair generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -1830,21 +1832,21 @@ def generalize_lone_pair_extensions(grp, i, basename, r_lone_pairs, r_lone_pairs
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
         
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_lone_pair_extensions")
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,), delta_v, delta_unc))
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,), delta_v, delta_var))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-p" + "".join([str(x) for x in r_gen]), "lonepairGen", (i,)))
 
@@ -1899,7 +1901,7 @@ def specify_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, es
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for site extensions"
             assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     g.atoms[k].label = a.label
@@ -1907,16 +1909,16 @@ def specify_site_extensions(grp, i, basename, r_site, r_site_full, tree=None, es
                 v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                     
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_site_extensions")
-            grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,), delta_v, delta_unc))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,), delta_v, delta_var))
         else:
             grps.append(
                 (g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in item]), "siteExt", (i,))
@@ -1963,7 +1965,7 @@ def generalize_site_extensions(grp, i, basename, r_site, r_site_full, tree=None,
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for site generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for site generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -1972,21 +1974,21 @@ def generalize_site_extensions(grp, i, basename, r_site, r_site_full, tree=None,
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
         
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_site_extensions")
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,), delta_v, delta_unc))
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,), delta_v, delta_var))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-s" + "".join([str(x) for x in r_gen]), "siteGen", (i,)))
 
@@ -2041,7 +2043,7 @@ def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for morphology extensions"
             assert tree is not None, "Must provide tree to estimate delta values for morphology extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     g.atoms[k].label = a.label
@@ -2049,16 +2051,16 @@ def specify_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tree=
                 v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
             
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_morphology_extensions")
-            grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]), "morphExt", (i,), delta_v, delta_unc))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in item]), "morphExt", (i,), delta_v, delta_var))
         else:
             grps.append(
                 (
@@ -2111,7 +2113,7 @@ def generalize_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tr
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for morphology generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for morphology generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -2120,21 +2122,21 @@ def generalize_morphology_extensions(grp, i, basename, r_morph, r_morph_full, tr
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
         
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_morphology_extensions")
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,), delta_v, delta_unc))
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,), delta_v, delta_var))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-m" + "".join([str(x) for x in r_gen]), "morphGen", (i,)))
 
@@ -2183,7 +2185,7 @@ def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=No
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ncoord extensions"
             assert tree is not None, "Must provide tree to estimate delta values for ncoord extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     g.atoms[k].label = a.label
@@ -2191,16 +2193,16 @@ def specify_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree=No
                 v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
             
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_ncoord_extensions")
-            grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,), delta_v, delta_unc))
+            grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,), delta_v, delta_var))
         else:
             grps.append(
                 (g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in item]), "coordExt", (i,))
@@ -2247,7 +2249,7 @@ def generalize_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for ncoord generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for ncoord generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -2256,21 +2258,21 @@ def generalize_ncoord_extensions(grp, i, basename, r_ncoord, r_ncoord_full, tree
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                     
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_ncoord_extensions")
-        grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,), delta_v, delta_unc))
+        grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,), delta_v, delta_var))
     else:
         grps.append((g, grpc, basename + "_" + str(i + 1) + "-n" + "".join([str(x) for x in r_gen]), "coordGen", (i,)))
 
@@ -2326,7 +2328,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     newgrp.atoms[k].label = a.label
@@ -2334,14 +2336,14 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                 v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
 
             newgrp.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_internal_new_bond_extensions")
             return [
                 (
@@ -2358,7 +2360,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                     "intNewBridgeExt",
                     (i, j),
                     delta_v,
-                    delta_unc,
+                    delta_var,
                 )
             ]
         else:
@@ -2400,7 +2402,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                 assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
                 assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
                 delta_v = None
-                delta_unc = None
+                delta_var = None
                 for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                     for k, a in enumerate(decomp.atoms):
                         newgrp.atoms[k].label = a.label
@@ -2408,13 +2410,13 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                     v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
                     if delta_v is None:
                         delta_v = v - v_init
-                        delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                        delta_var = unc ** 2 - unc_init ** 2
                     else:
                         delta_v += v - v_init
-                        delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                        delta_var += unc ** 2 - unc_init ** 2
 
                 newgrp.clear_labeled_atoms()
-                if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+                if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                     raise ValueError("NaN delta values computed in specify_internal_new_bond_extensions")
                 grps.append((
                     newgrp,
@@ -2430,7 +2432,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
                     "intNewBridgeExt",
                     (i, j),
                     delta_v,
-                    delta_unc,
+                    delta_var,
                 ))
             else:
                 grps.append((
@@ -2506,7 +2508,7 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 missing = False
                 for k, a in enumerate(decomp.atoms):
@@ -2525,14 +2527,14 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
 
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 
             newgrp.clear_labeled_atoms()
 
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in generalize_remove_bridge_extensions")
             grps.append((
                 newgrp,
@@ -2548,7 +2550,7 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
                 "genRemoveBridgeExt",
                 (i, j),
                 delta_v,
-                delta_unc,
+                delta_var,
             ))
         else:
             grps.append((
@@ -2599,7 +2601,7 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     newgrp.atoms[k].label = a.label
@@ -2607,14 +2609,14 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
                 v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
             
             newgrp.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_external_new_bond_extensions")
             grps.append(
                 (
@@ -2624,7 +2626,7 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
                     "extNewBondExt",
                     (len(newgrp.atoms) - 1,),
                     delta_v,
-                    delta_unc,
+                    delta_var,
                 )
             )
         else:
@@ -2673,7 +2675,7 @@ def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, 
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
         assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             missing = False
             for k, a in enumerate(decomp.atoms):
@@ -2690,14 +2692,14 @@ def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, 
                 v, unc = evaluate_single(tree, newgrp, estimate_uncertainty=True)
             if delta_v is None:
                 delta_v = v - v_init
-                delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
-                delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                delta_var += unc ** 2 - unc_init ** 2
         
         newgrp.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_remove_atom_extensions")
         grps.append(
             (
@@ -2707,7 +2709,7 @@ def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, 
                 "genAtomRemovalExt",
                 (len(newgrp.atoms) - 1,),
                 delta_v,
-                delta_unc,
+                delta_var,
             )
         )
     else:
@@ -2783,7 +2785,7 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=Non
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for bond extensions"
             delta_v = None
-            delta_unc = None
+            delta_var = None
             for decomp, d in assoc_decomposition_init_value_unc_dict.items():
                 for k, a in enumerate(decomp.atoms):
                     g.atoms[k].label = a.label
@@ -2791,14 +2793,14 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=Non
                 v, unc = evaluate_single(tree, g, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
                     delta_v += v - v_init
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                     
             g.clear_labeled_atoms()
             
-            if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
                 raise ValueError("NaN delta values computed in specify_bond_extensions")
             grps.append(
                 (
@@ -2814,7 +2816,7 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=Non
                     "bondExt",
                     (i, j),
                     delta_v,
-                    delta_unc,
+                    delta_var,
                 )
             )
         else:
@@ -2890,7 +2892,7 @@ def generalize_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond generalizations"
         assert tree is not None, "Must provide tree to estimate delta values for bond generalizations"
         delta_v = None
-        delta_unc = None
+        delta_var = None
         for decomp, d in assoc_decomposition_init_value_unc_dict.items():
             for k, a in enumerate(decomp.atoms):
                 g.atoms[k].label = a.label
@@ -2899,19 +2901,19 @@ def generalize_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=
             if delta_v is None:
                 delta_v = v - v_init
                 if unc < unc_init:
-                    delta_unc = -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc = np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var = unc ** 2 - unc_init ** 2
             else:
                 delta_v += v - v_init
                 if unc < unc_init:
-                    delta_unc += -np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
                 else:
-                    delta_unc += np.sqrt(max(0.0, unc ** 2 - unc_init ** 2))
+                    delta_var += unc ** 2 - unc_init ** 2
         
         g.clear_labeled_atoms()
         
-        if delta_v is None or delta_unc is None or np.isnan(delta_v) or np.isnan(delta_unc):
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
             raise ValueError("NaN delta values computed in generalize_bond_extensions")
         grps.append(
             (
@@ -2921,7 +2923,7 @@ def generalize_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=
                 "bondGen",
                 (i, j),
                 delta_v,
-                delta_unc,
+                delta_var,
             )
         )
     else:
