@@ -375,17 +375,16 @@ def get_extension_edge(
             and len(grps) != iter + 1 #there are groups to expand)
         ):
             iter += 1
-            if not (any([len(x) > 0 for x in out_exts])): #we have not found any extensions that split yet
-                if len(grps[iter]) > iter_item_cap or :
-                logging.error(
-                    "Recursion item cap hit not splitting {0} data at iter {1} with {2} items".format(
-                        len(items), iter, len(grps[iter])
+            if not (any([len(x) > 0 for x in out_exts])) and len(grps[iter]) > iter_item_cap:
+                    logging.error(
+                        "Recursion item cap hit not splitting {0} data at iter {1} with {2} items".format(
+                            len(items), iter, len(grps[iter])
+                        )
                     )
-                )
-                iter -= 1
-                gave_up_split = True
-                
-            elif iter > hard_iter_max:
+                    iter -= 1
+                    gave_up_split = True
+            
+            elif not (any([len(x) > 0 for x in out_exts])) and iter > hard_iter_max: #we have not found any extensions that split yet and hard_iter_max is violated 
                 iter -= 1
                 gave_up_split = True
                 logging.error("hard_iter_max achieved giving up split")
