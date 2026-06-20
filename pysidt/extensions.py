@@ -59,7 +59,6 @@ def get_extension_edge(
     node_children,
     basename,
     n_strucs_min,
-    iter_max=np.inf,
     iter_item_cap=np.inf,
     r=None,
     r_bonds=None,
@@ -71,6 +70,8 @@ def get_extension_edge(
     r_lone_pairs=None,
     just_reg_dim=False, #determine reg_dims for group only
     max_ring_gen_size=None,
+    soft_iter_max=np.inf,
+    hard_iter_max=np.inf,
 ):
     """
     finds the set of all extension groups to parent such that
