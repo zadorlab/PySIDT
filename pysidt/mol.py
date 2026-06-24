@@ -127,3 +127,10 @@ def label_bicyclic(mol_ori,m,cycle1,cycle2,cinter):
         new_collected_atoms = atoms_to_collect
 
     return
+
+def get_octet_deviation(atom):
+    if atom.symbol in ["Li","H"]:
+        return 2 - (atom.lone_pairs*2 + atom.radical_electrons + 2*sum(x.order for x in atom.bonds.values() if x.order >= 0.5))
+    else:
+        return 8 - (atom.lone_pairs*2 + atom.radical_electrons + 2*sum(x.order for x in atom.bonds.values() if x.order >= 0.5))
+    
