@@ -98,9 +98,10 @@ def adsorbate_site_decomposition(mol):
     
     return structs
 
-def ring_decomposition(mol):
+def ring_decomposition(mol,cycles=None):
     out = []
-    cycles = mol.get_deterministic_sssr()
+    if cycles is None:
+        cycles = mol.get_deterministic_sssr()
     for cycle in cycles:
         m = mol.copy(deep=True)
         for a in cycle:
@@ -171,4 +172,4 @@ def bicyclic_plus_ring_decomposition(mol):
                 label_bicyclic(mol,m,cycle,cycle2,cinter)
                 out.append(m)
 
-    return ring_decomposition(mol,cycles)+out
+    return ring_decomposition(mol,cycles=cycles)+out
