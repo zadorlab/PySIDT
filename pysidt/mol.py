@@ -92,15 +92,15 @@ def label_bicyclic(mol_ori,m,cycle1,cycle2,cinter):
         c1 = cycle1
         c2 = cycle2
 
-    bicycle = set(c1) | set(c2)
+    bicycle = set(c1) | set(c2) #all atoms of the bicycle
     
     #find central intersection atoms
-    central_atoms = cinter
+    central_atoms = cinter #starting from the cycle intersection
     atoms_to_remove = []
-    while len(atoms_to_remove) < len(central_atoms):
+    while len(atoms_to_remove) < len(central_atoms): #each iteration look around each remaining atom
         for a in atoms_to_remove:
             central_atoms.remove(a)
-        for a in central_atoms:
+        for a in central_atoms: #remove atoms that are adjacent to atoms outside until you have the intersection atom/atoms farthest from everything else
             if a not in atoms_to_remove and any(b not in central_atoms for b in a.bonds.keys() if b in bicycle):
                 atoms_to_remove.append(a)
 
