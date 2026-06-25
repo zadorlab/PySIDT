@@ -3253,6 +3253,99 @@ def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, 
         )
     return grps
 
+def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates extensions for the removal of an atom 
+    """
+    # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
+    if len(mol.atoms) < 2:
+        return []
+    label_list = []
+    mols = []
+    newmol = mol.copy(deep=True)
+    mapping = {a:newmol.atoms[q] for q,a in enumerate(mol.atoms)}
+    
+    atom_type = newmol.atoms[i].atomtype
+    if len(atom_type) > 1:
+        atom_type_str = ""
+        for k in atom_type:
+            label_list.append(k.label)
+        for p in sorted(label_list):
+            atom_type_str += p
+    elif len(atom_type) == 0:
+        atom_type_str = ""
+    else:
+        atom_type_str = atom_type[0].label
+    
+    adjacent_atoms = newmol.atoms[i].bonds.keys()
+    newmol.remove_atom(newmol.atoms[i])
+    
+    if len(newmol.split()) > n_struc_max: #removing that atom creates too many separate structures
+        return []
+    
+    for a in adjacent_atoms:
+        octet = get_octet_deviation(a)
+        assert octet <= 0
+        while octet < 0:
+            H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
+            bd = Bond(a,H)
+            newmol.add_atom(H)
+            newmol.add_bond(bd)
+            octet -= 2
+            
+    if estimate_delta:
+        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+        assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
+        delta_v = None
+        delta_var = None
+        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            missing = False
+            for k, a in enumerate(decomp.atoms):
+                if mol.atoms[k] in mapping.keys():                
+                    mapping[mol.atoms[k]].label = a.label
+                elif a.label not in ["","*S"]: #we cannot map an important label for this decomposition
+                    missing = True
+                    break
+              
+            v_init, unc_init = d
+            if missing:
+                v, unc = 0.0,0.0
+            else:
+                v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
+            if delta_v is None:
+                delta_v = v - v_init
+                delta_var = unc ** 2 - unc_init ** 2
+            else:
+                delta_v += v - v_init
+                delta_var += unc ** 2 - unc_init ** 2
+        
+        newmol.clear_labeled_atoms()
+        
+        if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
+            raise ValueError("NaN delta values computed in generalize_remove_atom_extensions")
+        mols.append(
+            (
+                newmol,
+                None,
+                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
+                "genAtomRemovalExt",
+                (len(newgrp.atoms) - 1,),
+                delta_v,
+                delta_var,
+            )
+        )
+    else:
+        mols.append(
+            (
+                newmol,
+                None,
+                basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
+                "genAtomRemovalExt",
+                (len(newgrp.atoms) - 1,),
+            )
+        )
+    return mols
+
 def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the specification of bond order for a given bond
