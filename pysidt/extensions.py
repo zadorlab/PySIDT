@@ -3803,7 +3803,7 @@ def generative_extensions_from_tree_node(decomp,node):
         node: the node the decomposition matches in the tree
     """
     gen_structs = []
-    
+    tree_target_nodes = []
     #children
     
     gen_to_node_isomorphisms = decomp.find_subgraph_isomorphisms(node.group,save_order=True)
@@ -3913,6 +3913,7 @@ def generative_extensions_from_tree_node(decomp,node):
                     assert new_struct.is_subgraph_isomorphic(child.group, save_order=True)
                     new_struct.clear_labeled_atoms()
                     gen_structs.append(new_struct)
+                    tree_target_nodes.append(child)
     
     #parent
     node_to_parent_isomorphisms = node.group.find_subgraph_isomorphisms(node.parent.group,save_order=True)
@@ -3938,6 +3939,7 @@ def generative_extensions_from_tree_node(decomp,node):
                         st_at.props = p_at.props.copy()
                         if not new_struct.is_subgraph_isomorphic(node.group,generate_initial_map=True,save_order=True):
                             gen_structs.append(new_struct)
+                            tree_target_nodes.append(node.parent)
                 else:
                     unmapped_node_indices.append(node_index)
             
@@ -3966,7 +3968,7 @@ def generative_extensions_from_tree_node(decomp,node):
                         bd = new_struct.get_bond(new_struct.atoms[struct_index1],new_struct.atoms[struct_index2])
                         bd.order = parent_bd.order
                         gen_structs.append(new_struct)
-            
+                        tree_target_nodes.append(node.parent)
             #remove atoms/bonds, do not change the split of structures...remove all separate sets of connected atoms/bonds
             #cluster atoms/bonds
             unmapped_node_index_clusters = []
@@ -3995,6 +3997,7 @@ def generative_extensions_from_tree_node(decomp,node):
                 for a in gen_atoms:
                     new_struct.remove_atom(a)
                 gen_structs.append(new_struct)
+                tree_target_nodes.append(node.parent)
                 
             for missing_bond_inds in missing_bond_indices: #if they involved a removed atom we don't need to worry about them
                 if missing_bond_inds[0] in node_to_gen_index_isomorphism.keys() and missing_bond_inds[1] in node_to_gen_index_isomorphism.keys():
@@ -4002,9 +4005,9 @@ def generative_extensions_from_tree_node(decomp,node):
                     bd = new_struct.get_bond(new_struct.atoms[node_to_gen_index_isomorphism[missing_bond_inds[0]]],new_struct.atoms[node_to_gen_index_isomorphism[missing_bond_inds[1]]])
                     new_struct.remove_bond(bd)
                     gen_structs.append(new_struct)
+                    tree_target_nodes.append(node.parent)
     
-    return gen_structs    
-                                                
+    return gen_structs,tree_target_nodes 
 
 def set_intersection_with_atom(target_atom,other_atom):
     #atomtype
