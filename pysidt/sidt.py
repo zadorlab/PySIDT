@@ -156,7 +156,7 @@ class SubgraphIsomorphicDecisionTree:
         self.n_strucs_min = n_strucs_min
         self.iter_max = iter_max
         self.iter_item_cap = iter_item_cap
-        if self.soft_iter_max is None and self.hard_iter_max is None:
+        if soft_iter_max is None and hard_iter_max is None:
             self.soft_iter_max = iter_max
             self.hard_iter_max = np.inf
         else:
