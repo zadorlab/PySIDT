@@ -1375,7 +1375,7 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
             confidence_levels, proportion_correct = get_calibration_curve(errs, scaled_uncs, n)
             return np.nansum((proportion_correct - confidence_levels)**2)
             
-        for target_ind in range(len(self.target_num)):
+        for target_ind in range(self.target_num):
             result = minimize(objective_function, initial_scaling_factor, args=(np.array([x[target_ind] for x in val_error]), np.array([x[target_ind] for x in val_uncertainties])), method="Nelder-Mead")
             optimized_scaling_factor = result.x[0]
             logging.info(f"Scaling Node Uncertainties by Optimized Scaling Factor {optimized_scaling_factor**2:.3f}")
@@ -2226,7 +2226,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
         weights = self.weights
         W = self.W
 
-        unchanged = not update_cache
+        unchanged = not update_cache and len(self.cached_pred_depth_target_dict) > 0
         for depth in range(max_depth + 1):
             nodes = [node for node in self.nodes.values() if node.depth == depth]
             unchanged = unchanged and all(n.rule is not None for n in nodes)
