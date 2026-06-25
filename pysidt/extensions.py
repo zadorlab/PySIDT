@@ -4009,6 +4009,21 @@ def generative_extensions_from_tree_node(decomp,node):
     
     return gen_structs,tree_target_nodes 
 
+def molecular_generative_extensions_from_tree_node(mol_decomp,node):
+    """Generates generative extensions by following the tree up or down on individual decompositions
+    Currently assumes that the decompositions are labeling only (do not remove, modify, or add atoms apart from adding labels)
+    Args:
+        mol_decomp: a decomposition of the generative Molecule structure
+        node: the node the decomposition matches in the tree
+    """
+    decomp = mol_decomp.to_group()
+    gen_structs,tree_target_nodes  = generative_extensions_from_tree_node(decomp,node)
+    mol_structs = [st.make_sample_molecule() for st in gen_structs]
+    for i,st in enumerate(mol_structs):
+        assert st.is_subgraph_isomorphic(tree_target_nodes[i].group,save_order=True)
+    
+    return mol_structs
+
 def set_intersection_with_atom(target_atom,other_atom):
     #atomtype
     atomtypes = []
