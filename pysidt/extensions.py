@@ -2891,6 +2891,134 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
     
     return grps
 
+def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basename, r_bonds, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generalizes extensions by removing the shortest path (atoms/bonds)
+    between two atoms indexed i,j that already exist in the group
+    """
+    # cython.declare(newgrp=Group)
+    
+    paths = find_shortest_paths(mol.atoms[i],mol.atoms[j])
+    
+    if paths is None:
+        return []
+    else:
+        paths = [[mol.atoms.index(a) for a in p] for p in paths] #convert paths from lists of atoms to lists of atom indices
+    
+    atom_type_i = mol.atoms[i].atomtype
+    atom_type_j = mol.atoms[j].atomtype
+
+    if len(atom_type_i) > 1:
+        atom_type_i_str = ""
+        label_list_i = [k.label for k in atom_type_i]
+        for k in sorted(label_list_i):
+            atom_type_i_str += k
+    elif len(atom_type_i) == 0:
+        atom_type_i_str = ""
+    else:
+        atom_type_i_str = atom_type_i[0].label
+    if len(atom_type_j) > 1:
+        atom_type_j_str = ""
+        label_list_j = [k.label for k in atom_type_j]
+        for p in sorted(label_list_j):
+            atom_type_j_str += p
+    elif len(atom_type_j) == 0:
+        atom_type_j_str = ""
+    else:
+        atom_type_j_str = atom_type_j[0].label
+    
+    mols = []
+    for path in paths:
+        newmol = mol.copy(deep=True)
+        mapping = {a:newmol.atoms[q] for q,a in enumerate(grp.atoms)}
+        tail_atom = newmol.atoms[i]
+        head_atom = newmol.atoms[j]
+        if len(path) == 2: #just remove bond
+            newmol.remove_bond(newmol.get_bond(newmol.atoms[i], newmol.atoms[j]))
+        else: #remove internal atoms and bonds
+            for a in [newmol.atoms[q] for q in path]:
+                if a is not tail_atom and a is not head_atom:
+                    newmol.remove_atom(a)
+        
+        if len(newmol.split()) > n_strucs_max: #removing that path creates too many separate structures
+            continue
+        
+        for endatom in [head_atom,tail_atom]:
+            octet = get_octet_deviation(endatom)
+            assert octet > 0
+            while octet > 0:
+                H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
+                bd = Bond(endatom,H)
+                newmol.add_atom(H)
+                newmol.add_bond(bd)
+                octet -= 2
+        
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
+            delta_v = None
+            delta_var = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                missing = False
+                for k, a in enumerate(decomp.atoms):
+                    if mol.atoms[k] in mapping.keys():                
+                        mapping[mol.atoms[k]].label = a.label
+                    elif a.label not in ["","*S"]: #we cannot map an important label for this decomposition
+                        missing = True
+                        break
+                
+                v_init, unc_init = d
+                
+                if missing:
+                    v, unc = 0.0,0.0
+                else:
+                    v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
+
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_var = unc ** 2 - unc_init ** 2
+                else:
+                    delta_v += v - v_init
+                    delta_var += unc ** 2 - unc_init ** 2
+                
+            newmol.clear_labeled_atoms()
+
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
+                raise ValueError("NaN delta values computed in generalize_remove_bridge_extensions")
+            mols.append((
+                newmol,
+                None,
+                basename
+                + "_Int-"
+                + str(i + 1)
+                + atom_type_i_str
+                + "-"
+                + str(j + 1)
+                + atom_type_j_str
+                + "-Br"+str(len(path)),
+                "genRemoveBridgeExt",
+                (i, j),
+                delta_v,
+                delta_var,
+            ))
+        else:
+            mols.append((
+                newmol,
+                None,
+                basename
+                + "_Int-"
+                + str(i + 1)
+                + atom_type_i_str
+                + "-"
+                + str(j + 1)
+                + atom_type_j_str
+                + "-Br"+str(len(path)),
+                "genRemoveBridgeExt",
+                (i, j),
+            ))
+    
+    return mols
+
 def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the creation of a bond (of undefined order) between
