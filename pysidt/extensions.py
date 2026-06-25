@@ -3090,6 +3090,86 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
             )
     return grps
 
+def molecular_specify_external_new_bond_extensions(mol, i, basename, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+    """
+    generates extensions for the creation of a bond (of undefined order) between
+    an atom and a new atom that is not H
+    """
+    # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
+    mols = []
+    for alabel in r_label:
+        label_list = []
+        a = Atom(ATOMTYPES["C"])
+        a.label = alabel
+        newmol = mol.copy(deep=True)
+        newmol.add_atom(a)
+        j = newmol.atoms.index(a)
+        newmol.add_bond(Bond(newmol.atoms[i], newmol.atoms[j], order=1))
+        atom_type = newmol.atoms[i].atomtype
+        octet = get_octet_deviation(a)
+        assert octet <= 0
+        while octet < 0:
+            H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
+            bd = Bond(a,H)
+            mol.add_atom(H)
+            mol.add_bond(bd)
+            octet -= 2
+
+        if len(atom_type) > 1:
+            atom_type_str = ""
+            for k in atom_type:
+                label_list.append(k.label)
+            for p in sorted(label_list):
+                atom_type_str += p
+        elif len(atom_type) == 0:
+            atom_type_str = ""
+        else:
+            atom_type_str = atom_type[0].label
+
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
+            delta_v = None
+            delta_var = None
+            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+                for k, a in enumerate(decomp.atoms):
+                    newmol.atoms[k].label = a.label
+                v_init, unc_init = d
+                v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_var = unc ** 2 - unc_init ** 2
+                else:
+                    delta_v += v - v_init
+                    delta_var += unc ** 2 - unc_init ** 2
+            
+            newmol.clear_labeled_atoms()
+            
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
+                raise ValueError("NaN delta values computed in specify_external_new_bond_extensions")
+            mols.append(
+                (
+                    newmol,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                    delta_v,
+                    delta_var,
+                )
+            )
+        else:
+            mols.append(
+                (
+                    newmol,
+                    None,
+                    basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                    "extNewBondExt",
+                    (len(newgrp.atoms) - 1,),
+                )
+            )
+    return mols
+
 def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
     generates extensions for the removal of an atom 
