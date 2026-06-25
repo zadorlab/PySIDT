@@ -2,20 +2,21 @@ import logging
 from copy import deepcopy
 
 import numpy as np
+import itertools
 
 try:
-    from molecule.molecule.atomtype import ATOMTYPES
-    from molecule.molecule.element import bde_elements
+    from molecule.molecule.atomtype import ATOMTYPES, allElements, get_atomtype
+    from molecule.molecule.element import bde_elements, PeriodicSystem
     from molecule.molecule.group import GroupAtom, GroupBond
-    from molecule.molecule.molecule import Molecule
+    from molecule.molecule.molecule import Molecule, Atom, Bond
 except:
-    from rmgpy.molecule.atomtype import ATOMTYPES
-    from rmgpy.molecule.element import bde_elements
+    from rmgpy.molecule.atomtype import ATOMTYPES, allElements, get_atomtype
+    from rmgpy.molecule.element import bde_elements, PeriodicSystem
     from rmgpy.molecule.group import GroupAtom, GroupBond
-    from rmgpy.molecule.molecule import Molecule
+    from rmgpy.molecule.molecule import Molecule, Atom, Bond
 
 from pysidt.utils import find_shortest_paths, evaluate_single
-
+from pysidt.mol import get_octet_deviation
 
 def split_mols(data, newgrp):
     """
@@ -1258,6 +1259,190 @@ def get_extensions_for_generative_expansion(
             ex[1].update_fingerprint()
 
     return extents
+
+def molecular_transform_atom_extensions(
+    mol,
+    i,
+    basename,
+    r_full=None,
+    r_un_full=[0, 1, 2, 3],
+    r_site_full=[],
+    r_morph_full=[],
+    r_lone_pairs_full=[],
+    tree=None,
+    estimate_delta=False,
+    assoc_decomposition_init_value_unc_dict=None,
+):
+    """
+    Generate single-atom transform extensions by changing one atom in the original
+    group into any other fully specified valid atom configuration.
+
+    This generates transform extensions for Atoms
+    """
+    extents = []
+
+    if r_full is None:
+        r = bde_elements
+        r = [ATOMTYPES[x] for x in r]
+    elif isinstance(r_full[0], list):
+        r = [x for y in r_full for x in y]
+    else:
+        r = r_full[:]
+    
+    if r_un_full == []:
+        r_un = ['x']
+    else:
+        r_un = [x for y in r_un_full for x in y]
+    if r_site_full == []:
+        r_site = ['x']
+    else:
+        r_site = [x for y in r_site_full for x in y]
+    if r_morph_full == []:
+        r_morph = ['x']
+    else:
+        r_morph = [x for y in r_morph_full for x in y]
+    if r_lone_pairs_full == []:
+        r_lone_pairs = ['x']
+    else:
+        r_lone_pairs = [x for y in r_lone_pairs_full for x in y]
+
+    old_atom_type = mol.atoms[i].atomtype
+    old_element = mol.atoms[i]
+    old_radical_electrons = mol.atoms[i].radical_electrons
+    old_site = mol.atoms[i].site
+    old_morph = mol.atoms[i].morphology
+    old_lone_pairs = mol.atoms[i].lone_pairs
+    grps = []
+    
+    for atomtype,un,site,morph,lone_pairs in itertools.product(r,r_un,r_site,r_morph,r_lone_pairs):
+        element = None
+        for element_label in allElements:
+            if atomtype is ATOMTYPES[element_label] or atomtype in ATOMTYPES[element_label].specific:
+                element = element_label
+                break
+        
+        
+        atom = mol.atoms[i]
+        
+        atom.atomtype = atomtype
+        atom.element = element
+        if un != 'x':
+            atom.radical_electrons = un
+        if site != 'x':
+            atom.site = site
+        if morph != 'x':
+            atom.morph = morph
+        if lone_pairs != 'x':
+            atom.lone_pairs = lone_pairs
+        else:
+            atom.lone_pairs = PeriodicSystem.lone_pairs[atom.symbol]
+        
+        octet_deviation = get_octet_deviation(atom) #2/8 minus the number of total electrons
+        
+        lone_bonded_atom_inds = [mol.atoms.index(a) for a in atom.bonds.keys() if len(a.bonds) == 1]
+        
+        atom.atomtype = old_atom_type
+        atom.element = old_element
+        atom.radical_electrons = old_radical_electrons
+        atom.site = old_site
+        atom.morphology = old_morph
+        atom.lone_pairs = old_lone_pairs
+        
+        if octet_deviation < 0 and len(lone_bonded_atom_inds)*2 < abs(octet_deviation):
+            continue #we cannot remove enough lone bonded atoms to satisfy
+        
+        m = mol.copy(deep=True)
+        
+        atom = m.atoms[i]
+        
+        atom.atomtype = atomtype
+        atom.element = element
+        if un != 'x':
+            atom.radical_electrons = un
+        if site != 'x':
+            atom.site = site
+        if morph != 'x':
+            atom.morph = morph
+        if lone_pairs != 'x':
+            atom.lone_pairs = lone_pairs
+        else:
+            atom.lone_pairs = PeriodicSystem.lone_pairs[atom.symbol]
+        
+        if octet_deviation > 0: #need to add bonds
+            while octet_deviation > 1: #1 here because we may leave a radical
+                H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
+                bd = Bond(H,atom,order=1)
+                m.add_atom(H)
+                m.add_bond(bd)
+                octet_deviation -= 2
+        elif octet_deviation < 0: #need to remove bonds
+            lone_bond_ind = 0
+            while octet_deviation < 0:
+                m.remove_atom(m.atoms[lone_bond_ind])
+                lone_bond_ind += 1
+                
+        assert get_atomtype(atom,atom.edges)
+
+        if len(old_atom_type) > 1:
+            labelList = []
+            old_atom_type_str = ""
+            for k in old_atom_type:
+                labelList.append(k.label)
+            for p in sorted(labelList):
+                old_atom_type_str += p
+        elif len(old_atom_type) == 0:
+            old_atom_type_str = ""
+        else:
+            old_atom_type_str = old_atom_type[0].label
+
+        if estimate_delta:
+            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for atom extensions"
+            assert tree is not None, "Must provide tree to estimate delta values for atom extensions"
+            delta_v = None
+            delta_var = None
+            for decomp,d in assoc_decomposition_init_value_unc_dict.items():
+                for i,a in enumerate(decomp.atoms):
+                    g.atoms[i].label = a.label
+                v_init,unc_init = d
+                v,unc = evaluate_single(tree, g, estimate_uncertainty=True)
+                if delta_v is None:
+                    delta_v = v - v_init
+                    delta_var = unc**2 - unc_init**2
+                else:
+                    delta_v += v - v_init
+                    delta_var += unc**2 - unc_init**2
+            
+            g.clear_labeled_atoms()
+            
+            if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
+                logging.error(f"delta_v: {delta_v}")
+                logging.error(f"delta_var: {delta_var}")
+                raise ValueError("NaN delta values computed in specify_atom_extensions: " + g.to_adjacency_list())
+
+            grps.append(
+            (
+                g,
+                None,
+                basename + "_" + str(i + 1) + old_atom_type_str + "->" + str(atomtype),
+                "atomTransformExt",
+                (i,),
+                delta_v,
+                delta_var,
+            )
+            )
+                
+        else:
+            grps.append(
+                (
+                    g,
+                    None,
+                    basename + "_" + str(i + 1) + old_atom_type_str + "->" + str(atomtype),
+                    "atomTransfromExt",
+                    (i,),
+                )
+            )
+
+    return grps
 
 def specify_atom_extensions(grp, i, basename, r, r_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
     """
