@@ -26,7 +26,6 @@ class TestExtensionGeneration:
         )
         
         ms = [ext[0] for ext in exts]
-        logging.error([m.to_adjacency_list() for m in ms])
         msout = [Molecule(smiles=sm) for sm in ["CCC","CCO","CCN"]]
         
         for m in ms:
