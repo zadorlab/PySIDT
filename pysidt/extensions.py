@@ -2670,38 +2670,23 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
     if atom_i_lone_bonded_atoms == [] or atom_j_lone_bonded_atoms == []: #cannot easily remove H or Val7 to make bond
         return []
     
-    if len(atom_type_i) > 1:
-        atom_type_i_str = ""
-        label_list_i = [k.label for k in atom_type_i]
-        for k in sorted(label_list_i):
-            atom_type_i_str += k
-    elif len(atom_type_i) == 0:
-        atom_type_i_str = ""
-    else:
-        atom_type_i_str = atom_type_i[0].label
-    if len(atom_type_j) > 1:
-        atom_type_j_str = ""
-        label_list_j = [k.label for k in atom_type_j]
-        for p in sorted(label_list_j):
-            atom_type_j_str += p
-    elif len(atom_type_j) == 0:
-        atom_type_j_str = ""
-    else:
-        atom_type_j_str = atom_type_j[0].label
+    atom_type_i_str = atom_type_i.label
+    atom_type_j_str = atom_type_j.label
         
-    
     grps = []
     for bridgelen in range(max_ring_gen_size-pathlen+1): #includes bridgelen == 0
         if i == j and bridgelen < 2: #this is no change from the original group or external bond creation
             continue
+        if bridgelen == 0 and pathlen == 2: #bond already exists
+            continue
         newmol = mol.copy(deep=True)
         tail_atom = newmol.atoms[i]
-        tail_atom_remove_atom = [a for a in tail_atom.bonds.keys() if len(a.bonds) == 0][0]
-        mol.remove_atom(tail_atom_remove_atom)
+        tail_atom_remove_atom = [a for a in tail_atom.bonds.keys() if len(a.bonds) == 1][0]
+        newmol.remove_atom(tail_atom_remove_atom)
         head_atom = newmol.atoms[j]
-        head_atom_remove_atom = [a for a in head_atom.bonds.keys() if len(a.bonds) == 0][0]
+        head_atom_remove_atom = [a for a in head_atom.bonds.keys() if len(a.bonds) == 1][0]
         for k in range(bridgelen): #create first ring
-            newatm = Atom(ATOMTYPES['C'],radical_electrons=0,lone_pairs=0,charge=0)
+            newatm = Atom('C',radical_electrons=0,lone_pairs=0,charge=0)
             bd = Bond(tail_atom,newatm,order=1)
             H1 = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
             bdH1 = Bond(H1,newatm,order=1)
@@ -2718,6 +2703,8 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
             newmol.remove_atom(head_atom_remove_atom)
             bd = Bond(tail_atom,head_atom,order=1)
             newmol.add_bond(bd)
+        
+        newmol.update(sort_atoms=False)
         
         if estimate_delta:
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
