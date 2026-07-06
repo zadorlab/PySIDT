@@ -2895,29 +2895,14 @@ def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basen
     atom_type_i = mol.atoms[i].atomtype
     atom_type_j = mol.atoms[j].atomtype
 
-    if len(atom_type_i) > 1:
-        atom_type_i_str = ""
-        label_list_i = [k.label for k in atom_type_i]
-        for k in sorted(label_list_i):
-            atom_type_i_str += k
-    elif len(atom_type_i) == 0:
-        atom_type_i_str = ""
-    else:
-        atom_type_i_str = atom_type_i[0].label
-    if len(atom_type_j) > 1:
-        atom_type_j_str = ""
-        label_list_j = [k.label for k in atom_type_j]
-        for p in sorted(label_list_j):
-            atom_type_j_str += p
-    elif len(atom_type_j) == 0:
-        atom_type_j_str = ""
-    else:
-        atom_type_j_str = atom_type_j[0].label
+    
+    atom_type_i_str = atom_type_i.label
+    atom_type_j_str = atom_type_j.label
     
     mols = []
     for path in paths:
         newmol = mol.copy(deep=True)
-        mapping = {a:newmol.atoms[q] for q,a in enumerate(grp.atoms)}
+        mapping = {a:newmol.atoms[q] for q,a in enumerate(mol.atoms)}
         tail_atom = newmol.atoms[i]
         head_atom = newmol.atoms[j]
         if len(path) == 2: #just remove bond
@@ -2939,6 +2924,8 @@ def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basen
                 newmol.add_atom(H)
                 newmol.add_bond(bd)
                 octet -= 2
+        
+        newmol.update(sort_atoms=False)
         
         if estimate_delta:
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
