@@ -51,3 +51,33 @@ class TestExtensionGeneration:
             else:
                 assert False, f"Extension {m.to_smiles()} not generated in molecular_specify_internal_new_bond_extensions from propane"
     
+    def test_molecular_generalize_remove_bridge_extensions(self):
+        mol = Molecule(smiles="C1CCOC12CC2")
+        
+        exts = []
+        for i in range(len(mol.atoms)):
+            for j in range(len(mol.atoms)):
+                if i > j:
+                    exts.extend(molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max=1, basename="", r_bonds=[1.0,2.0,3.0], 
+                                                    tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None))
+                    
+        sms = ['CCOC1(C)CC1',
+            'CCC1(OC)CC1',
+            'CCCC1(O)CC1',
+            'CCCOC1CC1',
+            'CCCC1CC1',
+            'OCCCC1CC1',
+            'CCC1CCCO1',
+            'CCC1CCCO1',
+            'CC1(C)CCCO1']
+        
+        correct_mols = [Molecule(smiles=sm) for sm in sms]
+        
+        for ext in exts:
+            m = ext[0]
+            for mout in correct_mols:
+                if m.is_isomorphic(mout,save_order=True):
+                    break
+            else:
+                assert False, f"Extension {m.to_smiles()} not generated in molecular_generalize_remove_bridge_extensions from C1CCOC12CC2"
+                
