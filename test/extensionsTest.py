@@ -81,3 +81,20 @@ class TestExtensionGeneration:
             else:
                 assert False, f"Extension {m.to_smiles()} not generated in molecular_generalize_remove_bridge_extensions from C1CCOC12CC2"
                 
+    def test_molecular_specify_external_new_bond_extensions(self):
+        mol = Molecule(smiles="CCC")
+        
+        exts = molecular_specify_external_new_bond_extensions(mol, 0, "", [1.0,2.0,3.0], 
+                        [''], tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None)
+        
+        m = [ext[0] for ext in exts][0]
+        msout = Molecule(smiles="CCCC")
+        
+        assert m.is_isomorphic(msout,save_order=True), f"Extension {msout.to_smiles()} not generated in molecular_specify_external_new_bond_extensions from propane"
+        
+    def test_molecular_generalize_remove_atom_extensions(self):
+        mol = Molecule(smiles="CCC")
+        
+        exts = molecular_generalize_remove_atom_extensions(mol, 0, "", 1, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None)
+        
+        assert exts[0][0].is_isomorphic(Molecule(smiles="CC"),save_order=True), f"Extension CC not generated in molecular_generalize_remove_atom_extensions from propane"
