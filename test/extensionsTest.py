@@ -98,3 +98,19 @@ class TestExtensionGeneration:
         exts = molecular_generalize_remove_atom_extensions(mol, 0, "", 1, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None)
         
         assert exts[0][0].is_isomorphic(Molecule(smiles="CC"),save_order=True), f"Extension CC not generated in molecular_generalize_remove_atom_extensions from propane"
+
+    def test_molecular_transform_bond_extensions(self):
+        mol = Molecule(smiles="CCC")
+        
+        exts = molecular_transform_bond_extensions(mol, 0, 1, "", [1.0,2.0,3.0], [1.0,2.0,3.0], tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None)
+        
+        ms = [ext[0] for ext in exts]
+        msouts = [Molecule(smiles=sm) for sm in ["CCC","CC=C","CC#C"]]
+        
+        for m in ms:
+            for mout in msouts:
+                if m.is_isomorphic(mout,save_order=True):
+                    break
+            else:
+                assert False, f"Unexpected Extension {m.to_smiles()} generated in molecular_transform_bond_extensions from propane"
+        
