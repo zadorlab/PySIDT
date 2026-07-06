@@ -3234,39 +3234,34 @@ def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, t
     # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
     if len(mol.atoms) < 2:
         return []
-    label_list = []
+    
     mols = []
     newmol = mol.copy(deep=True)
     mapping = {a:newmol.atoms[q] for q,a in enumerate(mol.atoms)}
     
     atom_type = newmol.atoms[i].atomtype
-    if len(atom_type) > 1:
-        atom_type_str = ""
-        for k in atom_type:
-            label_list.append(k.label)
-        for p in sorted(label_list):
-            atom_type_str += p
-    elif len(atom_type) == 0:
-        atom_type_str = ""
-    else:
-        atom_type_str = atom_type[0].label
+    
+    atom_type_str = atom_type.label
     
     adjacent_atoms = newmol.atoms[i].bonds.keys()
     newmol.remove_atom(newmol.atoms[i])
     
-    if len(newmol.split()) > n_struc_max: #removing that atom creates too many separate structures
+    nsplit = newmol.split()
+    if len([x for x in nsplit if len(x.atoms) > 1]) > n_struc_max: #removing that atom creates too many separate structures
         return []
-    
+    newmol = [x for x in nsplit if len(x.atoms) > 1][0]
     for a in adjacent_atoms:
-        octet = get_octet_deviation(a)
-        assert octet <= 0
-        while octet < 0:
-            H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
-            bd = Bond(a,H)
-            newmol.add_atom(H)
-            newmol.add_bond(bd)
-            octet -= 2
-            
+        if a in newmol.atoms:
+            octet = get_octet_deviation(a)
+            while octet > 0:
+                H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
+                bd = Bond(a,H)
+                newmol.add_atom(H)
+                newmol.add_bond(bd)
+                octet -= 2
+           
+    newmol.update(sort_atoms=False)
+    
     if estimate_delta:
         assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
         assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
@@ -3303,7 +3298,7 @@ def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, t
                 None,
                 basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
                 "genAtomRemovalExt",
-                (len(newgrp.atoms) - 1,),
+                (len(newmol.atoms) - 1,),
                 delta_v,
                 delta_var,
             )
@@ -3315,7 +3310,7 @@ def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, t
                 None,
                 basename + "_Ext-" + str(i + 1) + atom_type_str + "-R",
                 "genAtomRemovalExt",
-                (len(newgrp.atoms) - 1,),
+                (len(newmol.atoms) - 1,),
             )
         )
     return mols
