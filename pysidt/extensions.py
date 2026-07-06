@@ -3441,21 +3441,25 @@ def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_fu
     if isinstance(r_bonds_full[0],list):
         r_spc_bonds_full = [[y for y in x if y in r_bonds] for x in r_bonds_full]
         if len(r_spc_bonds_full) == 1:
-            r_spc_bonds_full = [[x] for x in r_spc_bonds_full[0]]
+            r_spc_bonds_full = [x for x in r_spc_bonds_full[0]]
         else:
-            r_spc_bonds_full += [[x] for x in sum(r_spc_bonds_full,[]) if [x] not in r_spc_bonds_full]
+            r_spc_bonds_full += [x for x in sum(r_spc_bonds_full,[]) if [x] not in r_spc_bonds_full]
     else:
-        r_spc_bonds_full = [[x] for x in r_bonds_full if x in r_bonds]
+        r_spc_bonds_full = [x for x in r_bonds_full if x in r_bonds]
         
     for order in r_spc_bonds_full:
         lone_bonded_atom_inds_i = [mol.atoms.index(a) for a in mol.atoms[i].bonds.keys() if len(a.bonds) == 1]
         lone_bonded_atom_inds_j = [mol.atoms.index(a) for a in mol.atoms[j].bonds.keys() if len(a.bonds) == 1]
         bd = mol.get_bond(mol.atoms[i],mol.atoms[j])
+        logging.error((order,bd.order,min(len(lone_bonded_atom_inds_i),len(lone_bonded_atom_inds_j))))
         if order > (bd.order + min(len(lone_bonded_atom_inds_i),len(lone_bonded_atom_inds_j))): #we can't create this bond without deleting more than local lone bonded atoms
             continue
         
         newmol = mol.copy(deep=True)
         newmol.atoms[i].bonds[newmol.atoms[j]].order = order
+        lone_bonded_atoms_i = [newmol.atoms[q] for q in lone_bonded_atom_inds_i]
+        lone_bonded_atoms_j = [newmol.atoms[q] for q in lone_bonded_atom_inds_j]
+        
         for k,bdatoms in enumerate([newmol.atoms[i],newmol.atoms[j]]):
             octet = get_octet_deviation(bdatoms)
             if octet > 0:
@@ -3469,41 +3473,27 @@ def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_fu
                 lone_bonded_ind = 0
                 while octet < 0:
                     if k == 0:
-                        at_remove = newmol.atoms[lone_bonded_atom_inds_i[lone_bonded_ind]]
+                        at_remove = lone_bonded_atoms_i[lone_bonded_ind]
                     else:
-                        at_remove = newmol.atoms[lone_bonded_atom_inds_j[lone_bonded_ind]]
+                        at_remove = lone_bonded_atoms_j[lone_bonded_ind]
                     newmol.remove_atom(at_remove)
                     octet += 2
                     lone_bonded_ind += 1
-                    
+        
         atom_type_i = newmol.atoms[i].atomtype
         atom_type_j = newmol.atoms[j].atomtype
 
-        if len(atom_type_i) > 1:
-            atom_type_i_str = ""
-            for k in atom_type_i:
-                label_list.append(k.label)
-            for p in sorted(label_list):
-                atom_type_i_str += p
-        elif len(atom_type_i) == 0:
-            atom_type_i_str = ""
-        else:
-            atom_type_i_str = atom_type_i[0].label
-        if len(atom_type_j) > 1:
-            atom_type_j_str = ""
-            for k in atom_type_j:
-                label_list.append(k.label)
-            for p in sorted(label_list):
-                atom_type_j_str += p
-        elif len(atom_type_j) == 0:
-            atom_type_j_str = ""
-        else:
-            atom_type_j_str = atom_type_j[0].label
+    
+        atom_type_i_str = atom_type_i.label
+        atom_type_j_str = atom_type_j.label
 
         b = ""
         for v in bdict.keys():
             if any(abs(v - x) < 1e-4 for x in [order]):
                 b += bdict[v]
+        
+        newmol.update(sort_atoms=False)
+        
         if estimate_delta:
             assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for bond extensions"
