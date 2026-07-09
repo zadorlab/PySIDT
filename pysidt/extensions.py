@@ -3050,84 +3050,84 @@ def specify_external_new_bond_extensions(grp, i, basename, r_bonds, r_label, tre
             )
     return grps
 
-def molecular_specify_external_new_bond_extensions(mol, i, basename, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def molecular_specify_external_new_bond_extensions(mol, i, basename, r, r_bonds, r_label, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc=None):
     """
     generates extensions for the creation of a bond (of undefined order) between
     an atom and a new atom that is not H
     """
     # cython.declare(ga=GroupAtom, newgrp=Group, j=int)
     mols = []
-    for alabel in r_label:
-        label_list = []
-        single_bonded_atomstrs = [asing.element.symbol for (asing,bd) in mol.atoms[i].bonds.items() if len(asing.bonds) == 1]
-        unique_atomstr_indices = np.unique(single_bonded_atomstrs, return_index=True)[1]
-        single_bonded_atomind_bds = [(mol.atoms.index(asing),bd) for (asing,bd) in mol.atoms[i].bonds.items() if len(asing.bonds) == 1]
-        single_bonded_atomind_bds = [single_bonded_atomind_bds[q] for q in unique_atomstr_indices]
-        
-        for (asingind,bd) in single_bonded_atomind_bds:
-            newmol = mol.copy(deep=True)
-            asing = newmol.atoms[asingind]
-            newmol.remove_atom(asing)
-            a = Atom("C", radical_electrons=0, lone_pairs=0, charge=0)
-            a.label = alabel
-            newmol.add_atom(a)
-            newmol.add_bond(Bond(newmol.atoms[i], a, order=bd.order))
-            atom_type = newmol.atoms[i].atomtype
-            octet = get_octet_deviation(a)
-            assert octet >= 0, (octet,newmol.to_adjacency_list())
-            while octet > 0:
-                H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
-                bd = Bond(a,H)
-                newmol.add_atom(H)
-                newmol.add_bond(bd)
-                octet -= 2
+    for at in r:
+        for alabel in r_label:
+            single_bonded_atomstrs = [asing.element.symbol for (asing,bd) in mol.atoms[i].bonds.items() if len(asing.bonds) == 1]
+            unique_atomstr_indices = np.unique(single_bonded_atomstrs, return_index=True)[1]
+            single_bonded_atomind_bds = [(mol.atoms.index(asing),bd) for (asing,bd) in mol.atoms[i].bonds.items() if len(asing.bonds) == 1]
+            single_bonded_atomind_bds = [single_bonded_atomind_bds[q] for q in unique_atomstr_indices]
 
-            atom_type_str = atom_type.label
+            for (asingind,bd) in single_bonded_atomind_bds:
+                newmol = mol.copy(deep=True)
+                asing = newmol.atoms[asingind]
+                atom = newmol.atoms[i]
+                newmol.remove_atom(asing)
+                a = Atom(at.label, radical_electrons=0, lone_pairs=PeriodicSystem.lone_pairs[at.label], charge=0)
+                a.label = alabel
+                newmol.add_atom(a)
+                newmol.add_bond(Bond(atom, a, order=bd.order))
+                atom_type = atom.atomtype
+                octet = get_octet_deviation(a)
+                assert octet >= 0, (octet,newmol.to_adjacency_list(),at,asingind)
+                while octet > 0:
+                    H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
+                    bd = Bond(a,H)
+                    newmol.add_atom(H)
+                    newmol.add_bond(bd)
+                    octet -= 2
 
-            newmol.update(sort_atoms=False)
-            
-            if estimate_delta:
-                assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
-                assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
-                delta_v = None
-                delta_var = None
-                for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-                    for k, a in enumerate(decomp.atoms):
-                        newmol.atoms[k].label = a.label
-                    v_init, unc_init = d
-                    v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
-                    if delta_v is None:
-                        delta_v = v - v_init
-                        delta_var = unc ** 2 - unc_init ** 2
-                    else:
-                        delta_v += v - v_init
-                        delta_var += unc ** 2 - unc_init ** 2
+                atom_type_str = atom_type.label
+
+                newmol.update(sort_atoms=False)
                 
-                newmol.clear_labeled_atoms()
-                
-                if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
-                    raise ValueError("NaN delta values computed in specify_external_new_bond_extensions")
-                mols.append(
-                    (
-                        newmol,
-                        None,
-                        basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
-                        "extNewBondExt",
-                        (len(newmol.atoms) - 1,),
-                        delta_v,
-                        delta_var,
+                if estimate_delta:
+                    assert assoc_decomposition_init_value_unc is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+                    assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
+                    delta_v = None
+                    delta_var = None
+                    for decomp,v_init,unc_init,tr in assoc_decomposition_init_value_unc:
+                        for k, a in enumerate(decomp.atoms):
+                            newmol.atoms[k].label = a.label
+                        v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
+                        if delta_v is None:
+                            delta_v = v - v_init
+                            delta_var = unc ** 2 - unc_init ** 2
+                        else:
+                            delta_v += v - v_init
+                            delta_var += unc ** 2 - unc_init ** 2
+                    
+                    newmol.clear_labeled_atoms()
+                    
+                    if delta_v is None or delta_var is None or np.isnan(delta_v) or np.isnan(delta_var):
+                        raise ValueError("NaN delta values computed in specify_external_new_bond_extensions")
+                    mols.append(
+                        (
+                            newmol,
+                            None,
+                            basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                            "extNewBondExt",
+                            (len(newmol.atoms) - 1,),
+                            delta_v,
+                            delta_var,
+                        )
                     )
-                )
-            else:
-                mols.append(
-                    (
-                        newmol,
-                        None,
-                        basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
-                        "extNewBondExt",
-                        (len(newmol.atoms) - 1,),
+                else:
+                    mols.append(
+                        (
+                            newmol,
+                            None,
+                            basename + "_Ext-" + str(i + 1) + atom_type_str + "-R" + alabel,
+                            "extNewBondExt",
+                            (len(newmol.atoms) - 1,),
+                        )
                     )
-                )
     return mols
 
 def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
