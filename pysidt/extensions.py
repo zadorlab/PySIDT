@@ -3213,7 +3213,7 @@ def generalize_remove_atom_extensions(grp, i, basename, n_struc_max, tree=None, 
         )
     return grps
 
-def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc=None):
     """
     generates extensions for the removal of an atom 
     """
@@ -3235,7 +3235,11 @@ def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, t
     nsplit = newmol.split()
     if len([x for x in nsplit if len(x.atoms) > 1]) > n_struc_max: #removing that atom creates too many separate structures
         return []
-    newmol = [x for x in nsplit if len(x.atoms) > 1][0]
+    newmol = [x for x in nsplit if len(x.atoms) > 1]
+    if len(newmol) == 0:
+        return []
+    else:
+        newmol = newmol[0]
     for a in adjacent_atoms:
         if a in newmol.atoms:
             octet = get_octet_deviation(a)
@@ -3249,11 +3253,11 @@ def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, t
     newmol.update(sort_atoms=False)
     
     if estimate_delta:
-        assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for external new-bond extensions"
+        assert assoc_decomposition_init_value_unc is not None, "Must provide assoc_decomposition_init_value_unc to estimate delta values for external new-bond extensions"
         assert tree is not None, "Must provide tree to estimate delta values for external new-bond extensions"
         delta_v = None
         delta_var = None
-        for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+        for decomp,v_init,unc_init,tr in assoc_decomposition_init_value_unc:
             missing = False
             for k, a in enumerate(decomp.atoms):
                 if mol.atoms[k] in mapping.keys():                
@@ -3262,7 +3266,6 @@ def molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max, t
                     missing = True
                     break
               
-            v_init, unc_init = d
             if missing:
                 v, unc = 0.0,0.0
             else:
