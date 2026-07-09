@@ -61,7 +61,7 @@ def take_generative_step(grp,
     """
     init_values,init_uncertainties = tree.evaluate(grp,estimate_uncertainty=True)
     
-    init_target = target_function(init_values, init_uncertainties)
+    init_target = target_function(grp, init_values, init_uncertainties)
     
     extents = get_extensions_for_generative_expansion(
         grp,
@@ -144,22 +144,22 @@ def take_generative_step(grp,
         shrink_sum = np.sum(probs[shrink_inds])
         if shrink_sum > 0:
             probs[shrink_inds] *= extension_weighting["shrink"]/np.sum(probs[shrink_inds])
-            assert np.isclose(np.sum(probs[shrink_inds]), extension_weighting["shrink"]), f"Shrink class probability sum {np.sum(probs[shrink_inds])} not close to target {extension_weighting['shrink']}"
+            assert np.isclose(np.sum(probs[shrink_inds]), extension_weighting["shrink"]), f"Shrink class probability sum {np.sum(probs[shrink_inds])} not close to target {extension_weighting['shrink']}, probs: {probs[shrink_inds]}"
     if len(growth_inds) > 0:
         growth_sum = np.sum(probs[growth_inds])
         if growth_sum > 0:
             probs[growth_inds] *= extension_weighting["growth"]/np.sum(probs[growth_inds])
-            assert np.isclose(np.sum(probs[growth_inds]), extension_weighting["growth"]), f"Growth class probability sum {np.sum(probs[growth_inds])} not close to target {extension_weighting['growth']}"
+            assert np.isclose(np.sum(probs[growth_inds]), extension_weighting["growth"]), f"Growth class probability sum {np.sum(probs[growth_inds])} not close to target {extension_weighting['growth']}, probs: {probs[growth_inds]}"
     if len(genspec_inds) > 0:
         genspec_sum = np.sum(probs[genspec_inds])
         if genspec_sum > 0:
             probs[genspec_inds] *= extension_weighting["genspec"]/np.sum(probs[genspec_inds])
-            assert np.isclose(np.sum(probs[genspec_inds]), extension_weighting["genspec"]), f"Genspec class probability sum {np.sum(probs[genspec_inds])} not close to target {extension_weighting['genspec']}"
+            assert np.isclose(np.sum(probs[genspec_inds]), extension_weighting["genspec"]), f"Genspec class probability sum {np.sum(probs[genspec_inds])} not close to target {extension_weighting['genspec']}, probs: {probs[genspec_inds]}"
     if len(spec_inds) > 0:
         spec_sum = np.sum(probs[spec_inds])
         if spec_sum > 0:
             probs[spec_inds] *= extension_weighting["spec"]/np.sum(probs[spec_inds])
-            assert np.isclose(np.sum(probs[spec_inds]), extension_weighting["spec"]), f"Spec class probability sum {np.sum(probs[spec_inds])} not close to target {extension_weighting['spec']}"
+            assert np.isclose(np.sum(probs[spec_inds]), extension_weighting["spec"]), f"Spec class probability sum {np.sum(probs[spec_inds])} not close to target {extension_weighting['spec']}, probs: {probs[spec_inds]}"
 
     for i,ext in enumerate(extents):
         ext_class_dict[ext[-4]] += probs[i]
@@ -179,6 +179,21 @@ def take_generative_step(grp,
     logging.error(ext_class_dict)
     
     
+    index = np.random.choice(range(len(target_deltas)), p=probs)
+    
+    #logging.error(f"Probability: {probs[index]} Probability distribution: {probs}")
+    
+    if index in exact_inds:
+        eind = exact_inds.tolist().index(index)
+        extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
+        return extents[index] + (new_target_values, new_target_uncertainties)
+    else:
+        new_target_values, new_target_uncertainties = tree.evaluate(grp, estimate_uncertainty=True)
+        new_target_delta = target_function(extents[index][0],new_target_values,new_target_uncertainties) - init_target
+        new_uncertainty_delta = new_target_uncertainties - init_uncertainties
+        extents[index] = extents[index][:-2] + (new_target_delta, new_uncertainty_delta)
+    return extents[index] + (new_target_values, new_target_uncertainties, )
+
 def molecular_take_generative_step(mol,
     target_function,
     tree,
