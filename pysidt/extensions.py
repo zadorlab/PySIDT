@@ -2549,6 +2549,8 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
         for bridgelen in range(max_ring_gen_size-pathlen+1): #includes bridgelen == 0
             if i == j and bridgelen < 2: #this is no change from the original group or external bond creation
                 continue
+            if bridgelen == 0 and grp.has_bond(grp.atoms[i],grp.atoms[j]): #the bridging bond already exists
+                continue
             newgrp = deepcopy(grp)
             tail_atom = newgrp.atoms[i]
             head_atom = newgrp.atoms[j]
