@@ -3417,7 +3417,7 @@ def specify_bond_extensions(grp, i, j, basename, r_bonds, r_bonds_full, tree=Non
             )
     return grps
 
-def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_full, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc=None):
     """
     generates extensions changing the order of a bond
     """
@@ -3437,24 +3437,29 @@ def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_fu
         r_spc_bonds_full = [x for x in r_bonds_full if x in r_bonds]
         
     for order in r_spc_bonds_full:
-        lone_bonded_atom_inds_i = [mol.atoms.index(a) for a in mol.atoms[i].bonds.keys() if len(a.bonds) == 1]
-        lone_bonded_atom_inds_j = [mol.atoms.index(a) for a in mol.atoms[j].bonds.keys() if len(a.bonds) == 1]
+        lone_bonded_atom_inds_i = [mol.atoms.index(a) for a in mol.atoms[i].bonds.keys() if len(a.bonds) == 1 and mol.atoms.index(a) != j]
+        lone_bonded_atom_inds_j = [mol.atoms.index(a) for a in mol.atoms[j].bonds.keys() if len(a.bonds) == 1 and mol.atoms.index(a) != i]
         bd = mol.get_bond(mol.atoms[i],mol.atoms[j])
-        logging.error((order,bd.order,min(len(lone_bonded_atom_inds_i),len(lone_bonded_atom_inds_j))))
+
         if order > (bd.order + min(len(lone_bonded_atom_inds_i),len(lone_bonded_atom_inds_j))): #we can't create this bond without deleting more than local lone bonded atoms
             continue
         
         newmol = mol.copy(deep=True)
-        newmol.atoms[i].bonds[newmol.atoms[j]].order = order
+        
+        atom_i = newmol.atoms[i]
+        atom_j = newmol.atoms[j]
+        if assoc_decomposition_init_value_unc:
+            decomp_to_decomp_newmol_atom_map = {decomp: {decomp.atoms[q]:newmol.atoms[q] for q in range(len(newmol.atoms))} for decomp,v_init,unc_init,tr in assoc_decomposition_init_value_unc}
+        atom_i.bonds[atom_j].order = order
         lone_bonded_atoms_i = [newmol.atoms[q] for q in lone_bonded_atom_inds_i]
         lone_bonded_atoms_j = [newmol.atoms[q] for q in lone_bonded_atom_inds_j]
         
-        for k,bdatoms in enumerate([newmol.atoms[i],newmol.atoms[j]]):
+        for k,bdatoms in enumerate([atom_i,atom_j]):
             octet = get_octet_deviation(bdatoms)
             if octet > 0:
                 while octet > 1:
                     H = Atom('H', radical_electrons=0, lone_pairs=0, charge=0)
-                    Hbd = Bond(a,H)
+                    Hbd = Bond(bdatoms,H)
                     newmol.add_atom(H)
                     newmol.add_bond(Hbd)
                     octet -= 2
@@ -3469,10 +3474,8 @@ def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_fu
                     octet += 2
                     lone_bonded_ind += 1
         
-        atom_type_i = newmol.atoms[i].atomtype
-        atom_type_j = newmol.atoms[j].atomtype
-
-    
+        atom_type_i = atom_i.atomtype
+        atom_type_j = atom_j.atomtype
         atom_type_i_str = atom_type_i.label
         atom_type_j_str = atom_type_j.label
 
@@ -3484,14 +3487,13 @@ def molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_fu
         newmol.update(sort_atoms=False)
         
         if estimate_delta:
-            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for bond extensions"
+            assert assoc_decomposition_init_value_unc is not None, "Must provide assoc_decomposition_init_value_unc to estimate delta values for bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for bond extensions"
             delta_v = None
             delta_var = None
-            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-                for k, a in enumerate(decomp.atoms):
-                    newmol.atoms[k].label = a.label
-                v_init, unc_init = d
+            for decomp,v_init,unc_init,tr in assoc_decomposition_init_value_unc:
+                for da,na in  decomp_to_decomp_newmol_atom_map[decomp].items():
+                    na.label = da.label
                 v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
