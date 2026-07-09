@@ -2866,7 +2866,7 @@ def generalize_remove_bridge_extensions(grp, i, j, n_strucs_max, basename, r_bon
     
     return grps
 
-def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basename, r_bonds, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basename, r_bonds, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc=None):
     """
     generalizes extensions by removing the shortest path (atoms/bonds)
     between two atoms indexed i,j that already exist in the group
@@ -2916,11 +2916,11 @@ def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basen
         newmol.update(sort_atoms=False)
         
         if estimate_delta:
-            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
+            assert assoc_decomposition_init_value_unc is not None, "Must provide assoc_decomposition_init_value_unc to estimate delta values for internal new-bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
             delta_v = None
             delta_var = None
-            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
+            for decomp,v_init,unc_init,tr in assoc_decomposition_init_value_unc:
                 missing = False
                 for k, a in enumerate(decomp.atoms):
                     if mol.atoms[k] in mapping.keys():                
@@ -2928,8 +2928,6 @@ def molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basen
                     elif a.label not in ["","*S"]: #we cannot map an important label for this decomposition
                         missing = True
                         break
-                
-                v_init, unc_init = d
                 
                 if missing:
                     v, unc = 0.0,0.0
