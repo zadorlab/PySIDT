@@ -1260,6 +1260,190 @@ def get_extensions_for_generative_expansion(
 
     return extents
 
+def get_molecular_extensions_for_generative_expansion(
+    mol,
+    tree,
+    decomposition,
+    r_full,
+    r_bonds_full=[1, 2, 3, 1.5, 4],
+    r_un_full=[0, 1, 2, 3],
+    r_site_full=[],
+    r_morph_full=[],
+    r_ncoord_full=[],
+    r_label=None,
+    r_lone_pairs_full=[],
+    basename="",
+    n_strucs_min=None,
+    n_strucs_max=None,
+    max_ring_gen_size=None,
+    decomposition_associated=None,
+    generate_extensions_from_tree=True,
+    generate_local_extensions=True,
+    maximum_size=np.inf,
+    ):
+    """
+    generate all possible extensions that can be applied to a group structure and roughly estimate changes in prediction
+    decomposition must preserve atom ordering relative to grp
+    decomposition_associated (f(decomp, i, j=None)): by default we choose "associated" decompositions to estimate based on whether a tagged atom in the decomposition would be changed, this allows "associated" decompositions to be specified by a different function of the decomposition and the atom indexes 
+    """
+
+    if n_strucs_min is None:
+        n_strucs_min = len(mol.split())
+        
+    if n_strucs_max is None:
+        n_strucs_max = len(mol.split())
+
+    if isinstance(r_full[0],list):
+        r = [x for y in r_full for x in y]
+    else:
+        r = r_full[:]
+    
+    if r_bonds_full:
+        if isinstance(r_bonds_full[0],list):
+            r_bonds = [x for y in r_bonds_full for x in y]
+        else:
+            r_bonds = r_bonds_full[:]
+    
+    if r_un_full:
+        if isinstance(r_un_full[0],list):
+            r_un = [x for y in r_un_full for x in y]
+        else:
+            r_un = r_un_full[:]
+    
+    if r_lone_pairs_full:
+        if isinstance(r_lone_pairs_full[0],list):
+            r_lone_pairs = [x for y in r_lone_pairs_full for x in y]
+        else:
+            r_lone_pairs = r_lone_pairs_full[:]
+            
+    if r_site_full:
+        if isinstance(r_site_full[0],list):
+            r_site = [x for y in r_site_full for x in y]
+        else:
+            r_site = r_site_full[:]
+    
+    if r_morph_full:
+        if isinstance(r_morph_full[0],list):
+            r_morph = [x for y in r_morph_full for x in y]
+        else:
+            r_morph = r_morph_full[:]
+    
+    if r_ncoord_full:
+        if isinstance(r_ncoord_full[0],list):
+            r_ncoord = [x for y in r_ncoord_full for x in y]
+        else:
+            r_ncoord = r_ncoord_full[:]
+    
+    if r_label is None or r_label == []:
+        r_label = ['']
+    
+    # generate appropriate r and r!H
+    if r is None:
+        r = bde_elements  # set of possible r elements/atoms
+        r = [ATOMTYPES[x] for x in r]
+
+    if ATOMTYPES["X"] in r and ATOMTYPES["H"] in r:
+        RxnH = r[:]
+        RxnH.remove(ATOMTYPES["H"])
+        R = r[:]
+        R.remove(ATOMTYPES["X"])
+        RnH = R[:]
+        RnH.remove(ATOMTYPES["H"])
+    elif ATOMTYPES["H"] in r:
+        R = r[:]
+        RnH = R[:]
+        RnH.remove(ATOMTYPES["H"])
+        RxnH = R[:]
+        RxnH.remove(ATOMTYPES["H"])
+    elif ATOMTYPES["X"] in r:
+        RxnH = r[:]
+        R = r[:]
+        R.remove(ATOMTYPES["X"])
+        RnH = R[:]
+    else:
+        R = r[:]
+        RnH = r[:]
+        RxnH = r[:]
+
+    
+    decomps = decomposition(mol)
+    assoc_decomposition_init_value_unc = [(decomp,)+evaluate_single(tree, decomp, estimate_uncertainty=True, trace=True) for decomp in decomps]
+    atoms = mol.atoms
+    
+    extents = []
+    
+    if generate_local_extensions:
+        for i, atm in enumerate(atoms):
+            
+            #find decompositions impacted most by changing this atom and estimate value and uncertainty
+            assoc_decomposition_init_i = [tup for tup in assoc_decomposition_init_value_unc if (decomposition_associated is not None and decomposition_associated(tup[0], i)) or (decomposition_associated is None and tup[0].atoms[i].label not in ["","*S"])]
+            
+            if len(assoc_decomposition_init_i) == 0:
+                continue
+            
+            typ = atm.atomtype
+            
+            extents.extend(
+                molecular_transform_atom_extensions(mol, i, basename, r_full=r_full, r_un_full=r_un_full, r_site_full=r_site_full, r_morph_full=r_morph_full, r_lone_pairs_full=r_lone_pairs_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc=assoc_decomposition_init_i)
+            )  # transform atoms
+            extents.extend(
+                molecular_specify_external_new_bond_extensions(mol, i, basename, r, r_bonds=r_bonds, r_label=r_label, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc=assoc_decomposition_init_i)
+            )
+            extents.extend(
+                molecular_generalize_remove_atom_extensions(mol, i, basename, n_struc_max=n_strucs_max, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc=assoc_decomposition_init_i)
+            )
+            
+            for j, atm2 in enumerate(atoms):
+                
+                assoc_decomposition_init_i_j = [tup for tup in assoc_decomposition_init_value_unc if (decomposition_associated is not None and decomposition_associated(tup[0], i, j)) or (decomposition_associated is None and (tup[0].atoms[i].label not in ["","*S"] or tup[0].atoms[j].label not in ["","*S"]))]
+                
+                if len(assoc_decomposition_init_i_j) == 0:
+                    continue
+                
+                if j <= i: 
+                    if mol.has_bond(atm, atm2):
+                        extents.extend(
+                            molecular_transform_bond_extensions(mol, i, j, basename, r_bonds, r_bonds_full, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc=assoc_decomposition_init_i_j)
+                        )
+                        extents.extend(
+                        molecular_generalize_remove_bridge_extensions(mol, i, j, n_strucs_max, basename, r_bonds=r_bonds, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc=assoc_decomposition_init_i_j)
+                        )
+                    else:
+                        extents.extend(
+                            molecular_specify_internal_new_bond_extensions(
+                                mol, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=max_ring_gen_size, tree=tree, estimate_delta=True, assoc_decomposition_init_value_unc=assoc_decomposition_init_i_j
+                            )
+                        )
+    
+    if generate_extensions_from_tree:
+        for decomp,v,unc,tr in assoc_decomposition_init_value_unc:
+            node = tree.nodes[tr]
+            structs,tree_nodes,delta,delta_var = molecular_generative_extensions_from_tree_node(decomp,node)
+            extents.extend([(st,None,node.name+"_Treegen","Treegen",None,delta[k],delta_var[k]) for k,st in enumerate(structs)])
+
+    assert all(not np.isnan(x[-2]) for x in extents)
+    assert all(not np.isnan(x[-1]) for x in extents)
+    
+    unique_extents = []
+    for ext in extents:
+        if len(ext[0].atoms) > maximum_size or ext[0].is_isomorphic(mol,save_order=True,strict=False):
+            continue
+        for uext in unique_extents:
+            if ext[0].is_isomorphic(uext[0],save_order=True,strict=False):
+                break
+        else:
+            unique_extents.append(ext)
+    
+    ext_classes = np.unique([x[-4] for x in unique_extents])
+    ext_class_dict = {ext_class:0 for ext_class in ext_classes}
+    
+    for i,ext in enumerate(unique_extents):
+        ext_class_dict[ext[-4]] += 1
+    logging.error("Extension class counts:")
+    logging.error(ext_class_dict)
+    
+    return unique_extents
+
 def molecular_transform_atom_extensions(
     mol,
     i,
