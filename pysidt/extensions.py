@@ -2618,7 +2618,7 @@ def specify_internal_new_bond_extensions(grp, i, j, n_strucs_min, basename, r_bo
     
     return grps    
 
-def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=None, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc_dict=None):
+def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, basename, r_bonds, max_ring_gen_size=None, tree=None, estimate_delta=False, assoc_decomposition_init_value_unc=None):
     """
     generates extensions for creation of a bond (of undefined order)
     between two atoms indexed i,j that already exist in the group and are unbonded
@@ -2656,11 +2656,24 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
         if bridgelen == 0 and pathlen == 2: #bond already exists
             continue
         newmol = mol.copy(deep=True)
+        mapping = {k: newmol.atoms[k] for k in range(len(newmol.atoms))}
+        
         tail_atom = newmol.atoms[i]
-        tail_atom_remove_atom = [a for a in tail_atom.bonds.keys() if len(a.bonds) == 1][0]
+        tail_atom_remove_atom = [a for a in tail_atom.bonds.keys() if len(a.bonds) == 1]
+        if len(tail_atom_remove_atom) == 0:
+            break
+        else:
+            tail_atom_remove_atom = tail_atom_remove_atom[0]
+            
         newmol.remove_atom(tail_atom_remove_atom)
+        
         head_atom = newmol.atoms[j]
-        head_atom_remove_atom = [a for a in head_atom.bonds.keys() if len(a.bonds) == 1][0]
+        head_atom_remove_atom = [a for a in head_atom.bonds.keys() if len(a.bonds) == 1]
+        if len(head_atom_remove_atom) == 0:
+            break
+        else:
+            head_atom_remove_atom = head_atom_remove_atom[0]
+
         for k in range(bridgelen): #create first ring
             newatm = Atom('C',radical_electrons=0,lone_pairs=0,charge=0)
             bd = Bond(tail_atom,newatm,order=1)
@@ -2683,14 +2696,13 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
         newmol.update(sort_atoms=False)
         
         if estimate_delta:
-            assert assoc_decomposition_init_value_unc_dict is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
+            assert assoc_decomposition_init_value_unc is not None, "Must provide assoc_decomposition_init_value_unc_dict to estimate delta values for internal new-bond extensions"
             assert tree is not None, "Must provide tree to estimate delta values for internal new-bond extensions"
             delta_v = None
             delta_var = None
-            for decomp, d in assoc_decomposition_init_value_unc_dict.items():
-                for k, a in enumerate(decomp.atoms):
-                    newmol.atoms[k].label = a.label
-                v_init, unc_init = d
+            for decomp,v_init,unc_init,tr in assoc_decomposition_init_value_unc:
+                for k, anew in mapping.items(): 
+                    anew.label = decomp.atoms[k].label
                 v, unc = evaluate_single(tree, newmol, estimate_uncertainty=True)
                 if delta_v is None:
                     delta_v = v - v_init
