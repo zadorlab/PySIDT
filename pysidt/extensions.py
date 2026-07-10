@@ -4167,18 +4167,12 @@ def molecular_generative_extensions_from_tree_node(mol_decomp,node,element_atomt
     
     return mol_structs,delta,delta_var
 
-def set_intersection_with_atom(target_atom,other_atom):
+def set_intersection_with_atom(target_atom,other_atom,element_atomtypes):
     #atomtype
     atomtypes = []
-    for atomtype1 in target_atom.atomtype:
-        for atomtype2 in other_atom.atomtype:
-            if atomtype1 is atomtype2:
-                if atomtype1 not in atomtypes:
-                    atomtypes.append(atomtype1)
-            else:
-                ats = set(atomtype1.specific).intersection(set(atomtype2.specific))
-                atomtypes.extend([a for a in ats if a not in atomtypes])
-    target_atom.atomtype = atomtypes
+    target_element_atomtypes = {el for atyp in target_atom.atomtype for el in get_atomtype_elements(atyp,element_atomtypes)}
+    other_element_atomtypes = {el for atyp in other_atom.atomtype for el in get_atomtype_elements(atyp,element_atomtypes)}
+    target_atom.atomtype = list(target_element_atomtypes.intersection(other_element_atomtypes))
     
     #radical electrons
     if target_atom.radical_electrons and other_atom.radical_electrons:
@@ -4213,14 +4207,14 @@ def set_intersection_with_atom(target_atom,other_atom):
     if not target_atom.label:
         target_atom.label = other_atom.label
     
-    if target_atom.props["Ncoord"] and other_atom.props["Ncoord"]:
+    if "Ncoord" in target_atom.props.keys() and target_atom.props["Ncoord"] and "Ncoord" in other_atom.props.keys() and other_atom.props["Ncoord"]:
         target_atom.props["Ncoord"] = list(set(target_atom.props["Ncoord"]).intersection(set(other_atom.props["Ncoord"])))
-    elif other_atom.props["Ncoord"]:
+    elif "Ncoord" in target_atom.props.keys() and other_atom.props["Ncoord"]:
         target_atom.props["Ncoord"] = other_atom.props["Ncoord"]
     
-    if target_atom.props["inRing"] and other_atom.props["inRing"]:
+    if "inRing" in target_atom.props.keys() and target_atom.props["inRing"] is not None and "inRing" in other_atom.props.keys() and other_atom.props["inRing"] is not None:
         target_atom.props["inRing"] = list(set(target_atom.props["inRing"]).intersection(set(other_atom.props["inRing"])))
-    elif other_atom.props["inRing"]:
+    elif "inRing" in other_atom.props.keys() and other_atom.props["inRing"] is not None:
         target_atom.props["inRing"] = other_atom.props["inRing"]
     
 def set_intersection_with_bond(target_bond,other_bond):
