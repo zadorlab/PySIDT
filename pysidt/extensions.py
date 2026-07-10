@@ -16,7 +16,7 @@ except:
     from rmgpy.molecule.molecule import Molecule, Atom, Bond
 
 from pysidt.utils import find_shortest_paths, evaluate_single
-from pysidt.mol import get_octet_deviation
+from pysidt.mol import get_octet_deviation, get_atomtype_elements
 
 def split_mols(data, newgrp):
     """
