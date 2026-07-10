@@ -133,4 +133,13 @@ def get_octet_deviation(atom):
         return 2 - (atom.lone_pairs*2 + atom.radical_electrons + 2*sum(x.order for x in atom.bonds.values() if x.order >= 0.5))
     else:
         return 8 - (atom.lone_pairs*2 + atom.radical_electrons + 2*sum(x.order for x in atom.bonds.values() if x.order >= 0.5))
-    
+
+def get_atomtype_elements(atomtype,element_atomtypes):
+    if atomtype in element_atomtypes: #if it is already an element
+        return [atomtype]
+    else: #is it a specific of an element
+        generics = [a for a in atomtype.generic if a in element_atomtypes]
+        if len(generics) > 0:
+            return generics
+        else: #more general than one element
+            return element_atomtypes
