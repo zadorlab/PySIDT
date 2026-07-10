@@ -4160,12 +4160,12 @@ def molecular_generative_extensions_from_tree_node(mol_decomp,node,element_atomt
         node: the node the decomposition matches in the tree
     """
     decomp = mol_decomp.to_group()
-    gen_structs,tree_target_nodes  = generative_extensions_from_tree_node(decomp,node)
+    gen_structs,tree_target_nodes,delta,delta_var = generative_extensions_from_tree_node(decomp,node,element_atomtypes)
     mol_structs = [st.make_sample_molecule() for st in gen_structs]
     for i,st in enumerate(mol_structs):
         assert st.is_subgraph_isomorphic(tree_target_nodes[i].group,save_order=True)
     
-    return mol_structs
+    return mol_structs,delta,delta_var
 
 def set_intersection_with_atom(target_atom,other_atom):
     #atomtype
