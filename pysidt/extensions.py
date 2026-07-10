@@ -3929,180 +3929,157 @@ def score_atom_reverse_extension_generation(g,atm):
         s -= np.inf
     return s
 
-def generative_extensions_from_tree_node(decomp,node):
-    """Generates generative extensions by following the tree up or down on individual decompositions
-    Currently assumes that the decompositions are labeling only (do not remove, modify, or add atoms apart from adding labels)
-    Args:
-        decomp: a decomposition of the generative group structure
-        node: the node the decomposition matches in the tree
-    """
+def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_atomtypes,struct_to_node_isomorphisms=None):
     gen_structs = []
-    tree_target_nodes = []
-    #children
     
-    gen_to_node_isomorphisms = decomp.find_subgraph_isomorphisms(node.group,save_order=True)
-    gen_to_node_index_isomorphisms = [{decomp.atoms.index(a):node.group.atoms.index(b) for a,b in iso.items()} for iso in gen_to_node_isomorphisms]
-    node_to_gen_index_isomorphisms = [{v:k for k,v in iso.items()} for iso in gen_to_node_isomorphisms]
+    if struct_to_node_isomorphisms is None:
+        struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
+    logging.error("{} isomorphisms between struct and grp".format(len(struct_to_node_isomorphisms)))
+    struct_to_grp_index_isomorphisms = [{struct.atoms.index(a):grp.atoms.index(b) for a,b in iso.items()} for iso in struct_to_node_isomorphisms]
+    node_to_struct_index_isomorphisms = [{grp.atoms.index(v):struct.atoms.index(k) for k,v in iso.items()} for iso in struct_to_node_isomorphisms]
     
-    for i,gen_node_iso in enumerate(gen_to_node_index_isomorphisms):
-        node_gen_iso = node_to_gen_index_isomorphisms[i]
-        for child in node.children:
-            if node.name.split("_")[-1][:6] != "Revgen": #not a reverse generated node so node-child ordering is preserved
-                new_struct = decomp.copy(deep=True)
-                for gen_index,node_index in gen_node_iso.items(): #find node mapped atoms intersection
-                    if decomp[gen_index].has_intersection_with(child.group[node_index]):
-                        set_intersection_with_atom(new_struct[gen_index],child.group[node_index])
-                    else:
-                        break #cannot make viable new_struct
+    for i,struct_node_iso in enumerate(struct_to_grp_index_isomorphisms):
+        node_struct_iso = node_to_struct_index_isomorphisms[i]
+        child_to_node_isomorphisms = grpspec.find_intersection_isomorphisms(grp,save_order=True)
+        node_to_child_isomorphisms = [{v:k for k,v in d.items()} for d in child_to_node_isomorphisms]
+        node_to_child_index_isomorphisms = [{grp.atoms.index(node_at):grpspec.atoms.index(child_at) for node_at,child_at in iso.items()} for iso in node_to_child_isomorphisms]
+        logging.error("{} isomorphisms between node and child".format(len(child_to_node_isomorphisms)))
+        for node_child_iso in node_to_child_index_isomorphisms:
+            new_struct = struct.copy(deep=True)
+            for struct_index,node_index in struct_node_iso.items(): #find node mapped atoms intersection, on these mappings we try to make every atom as specific as the child/specific group
+                if struct.atoms[struct_index].has_intersection_with(grpspec.atoms[node_child_iso[node_index]]):
+                    set_intersection_with_atom(new_struct.atoms[struct_index],grpspec.atoms[node_child_iso[node_index]],element_atomtypes=element_atomtypes)
                 else:
-                    for bd in child.group.get_all_edges(): #find node mapped bonds intersection
-                        ind1 = child.group.atoms.index(bd.atom1)
-                        ind2 = child.group.atoms.index(bd.atom2)
-                        if ind1 in node_gen_iso.keys() and ind2 in node_gen_iso.keys():
-                            if new_struct.has_bond(new_struct.atoms[node_gen_iso[ind1]],new_struct.atoms[node_gen_iso[ind2]]):
-                                bd_struct = new_struct.get_bond(new_struct.atoms[node_gen_iso[ind1]],new_struct.atoms[node_gen_iso[ind2]])
-                            else:
-                                bd_struct = None
-                            
-                            bd_child = node.child.group.get_bond(node.child.group.atoms[ind1],node.child.group.atoms[ind2])
+                    logging.error("Cannot intersect with grpspec") #if an atom cannot be made as specific as the child group we have to give up
+                    break #cannot make viable new_struct
+            else:
+                logging.error("atoms are fixed now moving on to bonds...")
+                continuing = False
+                for bd in grpspec.get_all_edges(): #find node mapped bonds intersection, on these mappings we try to make every bond as specific as the child/specific group
+                    ind1 = grpspec.atoms.index(bd.vertex1)
+                    ind2 = grpspec.atoms.index(bd.vertex2)
+                    if ind1 in node_struct_iso.keys() and ind2 in node_struct_iso.keys():
+                        if new_struct.has_bond(new_struct.atoms[node_struct_iso[ind1]],new_struct.atoms[node_struct_iso[ind2]]):
+                            bd_struct = new_struct.get_bond(new_struct.atoms[node_struct_iso[ind1]],new_struct.atoms[node_struct_iso[ind2]])
+                        else:
+                            bd_struct = None
+                        
+                        bd_child = grpspec.get_bond(grpspec.atoms[ind1],grpspec.atoms[ind2])
 
-                            if bd_struct and bd_child:
+                        if bd_struct and bd_child:
+                            if bd_struct.has_intersection_with(bd_child):
                                 set_intersection_with_bond(bd_struct,bd_child)
-                            else: #bd_struct None => bd_node None so this is a new bond...so add that to struct
-                                new_bd = GroupBond(new_struct.atoms[node_gen_iso[ind1]],new_struct.atoms[node_gen_iso[ind2]],order=bd_child.order)
-                                new_struct.add_bond(new_bd)
-
-                    #now add the missing atoms and associated bonds from the child to new_struct
-                    child_gen_iso = node_gen_iso.copy()
-                    while len(child_gen_iso) < len(child.group.atoms):
-                        map_len = len(child_gen_iso)
-                        for i,a in enumerate(child.group.atoms):
-                            if i in child_gen_iso.keys():
-                                continue
                             else:
-                                bonded_inds = [child.group.atoms.index(at) for at in a.bonds.keys()]
-                                map_adjacent_child_atom_inds = list(set(bonded_inds).intersection(set(child_gen_iso.keys())))
-                                if map_adjacent_child_atom_inds:
-                                    succeeded = False
-                                    for map_adjacent_child_atom_ind in map_adjacent_child_atom_inds: # changing ordering may change results
-                                        gen_ind = child_gen_iso[map_adjacent_child_atom_ind]
-                                        gen_atom = new_struct.atoms[gen_ind]
-                                        possible_atoms = [a for a in gen_atom.bonds.keys() if new_struct.atoms.index(a) not in child_gen_iso.values()]
-                                        for pa in possible_atoms: #changing ordering may change results
-                                            failed = False
-                                            if pa.has_intersection_with(a) and new_struct.get_bond(gen_atom,pa).has_intersection_with(child.group.get_bond(a,child.group.atoms[map_adjacent_child_atom_ind])):
-                                                bonds_to_set_intersection = []
-                                                bonds_to_add = []
-                                                for j in map_adjacent_child_atom_inds:
-                                                    if j != map_adjacent_child_atom_ind:
-                                                        gen_new_atom = new_struct.atoms[child_gen_iso[j]]
-                                                        child_atom = child.group.atoms[j]
-                                                        child_bd = child.group.get_bond(a,child_atom)
-                                                        if new_struct.has_bond(pa,gen_new_atom):
-                                                            recovered_bd = new_struct.get_bond(pa,gen_new_atom)
-                                                            if recovered_bd.has_intersection_with(child_bd):
-                                                                bonds_to_set_intersection.append((recovered_bd,child_bd))
-                                                            else:
-                                                                failed = True 
-                                                                break
-                                                        else:
-                                                            
-                                                            bonds_to_add.append(GroupBond(pa,gen_new_atom,order=child_bd.order))
-                                                
-                                                if failed:
-                                                    continue
-                                                else:   
-                                                    set_intersection_with_atom(pa,a)
-                                                    set_intersection_with_bond(new_struct.get_bond(gen_atom,pa),child.group.get_bond(a,child.group.atoms[map_adjacent_child_atom_ind]))
-
-                                                    for bd_pairs in bonds_to_set_intersection:
-                                                        set_intersection_with_bond(bd_pairs[0],bd_pairs[1])
-                                                    
-                                                    for bd in bonds_to_add:
-                                                        new_struct.add_bond(bd)
-                                                        
-                                                    child_gen_iso[i] = new_struct.atoms.index(pa)
-                                                    
-                                                    succeeded = True
-                                                    break
-                                                
-                                        if succeeded:
-                                            break
-                                        
-                                    if not succeeded: #we could not map this child atom onto existing atoms on new_struct so we will create a new atom
-                                        at = a.copy()
-                                        bonds_to_add = []
-                                        for map_adjacent_child_atom_ind in map_adjacent_child_atom_inds: # changing ordering may change results
-                                            gen_ind = child_gen_iso[map_adjacent_child_atom_ind]
-                                            gen_atom = new_struct.atoms[gen_ind]
-                                            new_bd = GroupBond(at,gen_atom,order=child.group.get_bond(child.group.atoms[i],child.group.atoms[map_adjacent_child_atom_ind]).order)
-                                            bonds_to_add.append(new_bd)
-                                            
-                                        new_struct.add_atom(at)
-                                        for bd in bonds_to_add:
-                                            new_struct.add_bond(new_bd)
-                                        at_ind = new_struct.atoms.index(at)
-                                        child_gen_iso[i] = at_ind
-                    
-                    assert new_struct.is_subgraph_isomorphic(child.group, save_order=True)
-                    new_struct.clear_labeled_atoms()
-                    gen_structs.append(new_struct)
-                    tree_target_nodes.append(child)
+                                logging.error("continuing")
+                                continuing = True
+                                break
+                        else: #bd_struct None => bd_node None so this is a new bond...so add that to struct
+                            new_bd = GroupBond(new_struct.atoms[node_struct_iso[ind1]],new_struct.atoms[node_struct_iso[ind2]],order=bd_child.order)
+                            new_struct.add_bond(new_bd)
+                if continuing:
+                    continue
+                
+                logging.error("adding missing atoms/bonds")
+                #now add the missing atoms and associated bonds from the child to new_struct
+                child_node_iso = {v:k for k,v in node_child_iso.items()}
+                child_struct_iso = {child_node_iso[k]:v for k,v in node_struct_iso.items()}
+                while len(child_struct_iso) < len(grpspec.atoms):
+                    map_len = len(child_struct_iso)
+                    for i,a in enumerate(grpspec.atoms):
+                        if i in child_struct_iso.keys(): #if that atom is already mapped to struct skip
+                            continue
+                        else:
+                            newga = grpspec.atoms[i].copy()
+                            bonded_inds = [grpspec.atoms.index(at) for at in a.bonds.keys()]
+                            mapped_bonded_inds = list(set(bonded_inds).intersection(set(child_struct_iso.keys())))
+                            new_struct.add_atom(newga)
+                            child_struct_iso[i] = new_struct.atoms.index(newga)
+                            for mapped_bonded_ind in mapped_bonded_inds:
+                                child_bond = grpspec.get_bond(grpspec.atoms[i],grpspec.atoms[mapped_bonded_ind])
+                                st_atom = new_struct.atoms[child_struct_iso[mapped_bonded_ind]]
+                                gbd = GroupBond(st_atom,newga,order=child_bond.order)
+                                new_struct.add_bond(gbd)
+                                
+                
+                assert new_struct.is_subgraph_isomorphic(grpspec, save_order=True)
+                new_struct.clear_labeled_atoms()
+                gen_structs.append(new_struct)
     
-    #parent
-    node_to_parent_isomorphisms = node.group.find_subgraph_isomorphisms(node.parent.group,save_order=True)
-    node_to_parent_index_isomorphisms = [{node.group.atoms.index(a):node.parent.group.atoms.index(b) for a,b in iso.items()} for iso in node_to_parent_isomorphisms]
+    return gen_structs
+
+def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_node_isomorphisms=None):
+    gen_structs = []
+    
+    if struct_to_node_isomorphisms is None:
+        struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
+    logging.error("{} isomorphisms between struct and node".format(len(struct_to_node_isomorphisms)))
+    struct_to_grp_index_isomorphisms = [{struct.atoms.index(a):grp.atoms.index(b) for a,b in iso.items()} for iso in struct_to_node_isomorphisms]
+    node_to_struct_index_isomorphisms = [{grp.atoms.index(v):struct.atoms.index(k) for k,v in iso.items()} for iso in struct_to_node_isomorphisms]
+    
+    node_to_parent_isomorphisms = grp.find_subgraph_isomorphisms(grpgen,save_order=True)
+    node_to_parent_index_isomorphisms = [{grp.atoms.index(a):grpgen.atoms.index(b) for a,b in iso.items()} for iso in node_to_parent_isomorphisms]
     for node_to_parent_index_isomorphism in node_to_parent_index_isomorphisms:
-        for node_to_gen_index_isomorphism in node_to_gen_index_isomorphisms:
+        for node_to_struct_index_isomorphism in node_to_struct_index_isomorphisms:
             unmapped_node_indices = []
-            for node_index,node_at in enumerate(node.group.atoms):
+            for node_index,node_at in enumerate(grp.atoms): #if the node is mapped generalize it to the parent
                 if node_index in node_to_parent_index_isomorphism.keys():
                     parent_index = node_to_parent_index_isomorphism[node_index]
-                    p_at = node.parent.group.atoms[parent_index]
-                    if not node_at.is_equivalent(p_at):
-                        struct_index = node_to_gen_index_isomorphism[node_index]
-                        new_struct = decomp.copy(deep=True)
-                        st_at = new_struct[struct_index]
-                        st_at.atomtype = p_at.atomtype
-                        st_at.radical_electrons = p_at.radical_electrons
-                        st_at.charge = p_at.charge
-                        st_at.label = p_at.label
-                        st_at.lone_pairs = p_at.lone_pairs
-                        st_at.site = p_at.site
-                        st_at.morphology = p_at.morphology
-                        st_at.props = p_at.props.copy()
-                        if not new_struct.is_subgraph_isomorphic(node.group,generate_initial_map=True,save_order=True):
+                    p_at = grpgen.atoms[parent_index]
+                    if not node_at.equivalent(p_at):
+                        logging.error(f"{(p_at,node_at)} were not equivalent")
+                        struct_index = node_to_struct_index_isomorphism[node_index]
+                        new_struct = struct.copy(deep=True)
+                        st_at = new_struct.atoms[struct_index]
+                        newst_at = GroupAtom(atomtype=p_at.atomtype,radical_electrons=p_at.radical_electrons,charge=p_at.charge,label=p_at.label,
+                                             lone_pairs=p_at.lone_pairs,site=p_at.site,morphology=p_at.morphology,props=p_at.props.copy())
+                        gbds = []
+                        for a,bd in st_at.bonds.items():
+                            gbds.append(GroupBond(newst_at,a,order=bd.order))
+                        new_struct.remove_atom(st_at)
+                        new_struct.vertices.insert(struct_index,newst_at)
+                        for bd in gbds:
+                            new_struct.add_bond(bd)
+                        logging.error("generated new parent struct based on mapped atom:")
+                        logging.error(new_struct.to_adjacency_list())
+                        logging.error(grp.to_adjacency_list())
+                        if not new_struct.is_subgraph_isomorphic(grp,save_order=True):
+                            logging.error("was not subgraph isomorphic to node adding struct...")
                             gen_structs.append(new_struct)
-                            tree_target_nodes.append(node.parent)
-                else:
+                        else: #otherwise this individual change is not enough due to isomorphic degeneracy...recurse
+                            logging.error("still matches grp recursing...")
+                            gen_structs.extend(extend_structure_from_group_to_general_group(new_struct,grp,grpgen))
+                            logging.error("recursion finished")
+                else: #if the node is unmapped note it for further analysis
                     unmapped_node_indices.append(node_index)
             
             missing_bond_indices = []
-            for bd in node.group.get_all_edges():
+            for bd in grp.get_all_edges(): #go through all node group bonds
+                logging.error(bd)
                 missing = False
-                node_index1 = node.group.atoms.index(bd.atom1)
-                node_index2 = node.group.atoms.index(bd.atom2)
-                if node_index1 in node_to_parent_index_isomorphism.keys() and node_index2 in node_to_parent_index_isomorphism.keys():
+                node_index1 = grp.atoms.index(bd.vertex1)
+                node_index2 = grp.atoms.index(bd.vertex2)
+                if node_index1 in node_to_parent_index_isomorphism.keys() and node_index2 in node_to_parent_index_isomorphism.keys() and grpgen.has_bond(grpgen.atoms[node_to_parent_index_isomorphism[node_index1]],grpgen.atoms[node_to_parent_index_isomorphism[node_index2]]): #if both 
                     parent_index1 = node_to_parent_index_isomorphism[node_index1]
                     parent_index2 = node_to_parent_index_isomorphism[node_index2]
                 else:
-                    missing = True
-                if not node.parent.group.has_bond(node.parent.group.atoms[parent_index1],node.parent.group.atoms[parent_index2]):
+                    missing = True #bond in node is not present in parent
+                if not missing and not grpgen.has_bond(grpgen.atoms[parent_index1],grpgen.atoms[parent_index2]):
                     missing = True
                 
                 if missing:
+                    logging.error(f"noting node bond not present in parent: {(node_index1,node_index2)}")
                     missing_bond_indices.append((node_index1,node_index2))
                 else:
-                    parent_bd = node.parent.group.get_bond(node.parent.group.atoms[parent_index1],node.parent.group.atoms[parent_index2])
-                    node_bd = node.group.get_bond(node.group.atoms[node_index1],node.group.atoms[node_index2])
-                    if not node_bd.equivalent(parent_bd):
-                        struct_index1 = node_to_gen_index_isomorphism[node_index1]
-                        struct_index2 = node_to_gen_index_isomorphism[node_index2]
-                        new_struct = decomp.copy(deep=True)
+                    parent_bd = grpgen.get_bond(grpgen.atoms[parent_index1],grpgen.atoms[parent_index2])
+                    node_bd = grp.get_bond(grp.atoms[node_index1],grp.atoms[node_index2])
+                    if not node_bd.equivalent(parent_bd): #if the bonds aren't the same adjust bond order to match parent, but not node
+                        logging.error("node and parent bonds not equivalent")
+                        struct_index1 = node_to_struct_index_isomorphism[node_index1]
+                        struct_index2 = node_to_struct_index_isomorphism[node_index2]
+                        new_struct = struct.copy(deep=True)
                         bd = new_struct.get_bond(new_struct.atoms[struct_index1],new_struct.atoms[struct_index2])
                         bd.order = parent_bd.order
                         gen_structs.append(new_struct)
-                        tree_target_nodes.append(node.parent)
             #remove atoms/bonds, do not change the split of structures...remove all separate sets of connected atoms/bonds
             #cluster atoms/bonds
             unmapped_node_index_clusters = []
@@ -4110,7 +4087,7 @@ def generative_extensions_from_tree_node(decomp,node):
             
             while len(unmapped_node_indices_left) > 0:
                 ind = unmapped_node_indices_left[0]
-                a = node.group.atoms[ind]
+                a = grp.atoms[ind]
                 cluster = [ind]
                 new_ats = [a]
                 while len(new_ats) > 0:
@@ -4118,32 +4095,64 @@ def generative_extensions_from_tree_node(decomp,node):
                     new_ats = []
                     for at in ats:
                         for at2 in at.bonds.keys():
-                            ind2 = node.group.index(at2)
+                            ind2 = grp.atoms.index(at2)
                             if ind2 in unmapped_node_indices and ind2 not in cluster:
                                 new_ats.append(at2)
                                 cluster.append(ind2)
                 
                 unmapped_node_index_clusters.append(cluster)
+                for cind in cluster:
+                    unmapped_node_indices_left.remove(cind)
             
             for node_index_cluster in unmapped_node_index_clusters:
-                new_struct = decomp.copy(deep=True)
-                gen_atoms = [new_struct.atoms[node_to_gen_index_isomorphism[index]] for index in node_index_cluster]
+                new_struct = struct.copy(deep=True)
+                gen_atoms = [new_struct.atoms[node_to_struct_index_isomorphism[index]] for index in node_index_cluster]
                 for a in gen_atoms:
                     new_struct.remove_atom(a)
                 gen_structs.append(new_struct)
-                tree_target_nodes.append(node.parent)
                 
             for missing_bond_inds in missing_bond_indices: #if they involved a removed atom we don't need to worry about them
-                if missing_bond_inds[0] in node_to_gen_index_isomorphism.keys() and missing_bond_inds[1] in node_to_gen_index_isomorphism.keys():
-                    new_struct = decomp.copy(deep=True)
-                    bd = new_struct.get_bond(new_struct.atoms[node_to_gen_index_isomorphism[missing_bond_inds[0]]],new_struct.atoms[node_to_gen_index_isomorphism[missing_bond_inds[1]]])
+                if missing_bond_inds[0] in node_to_struct_index_isomorphism.keys() and missing_bond_inds[1] in node_to_struct_index_isomorphism.keys():
+                    new_struct = struct.copy(deep=True)
+                    bd = new_struct.get_bond(new_struct.atoms[node_to_struct_index_isomorphism[missing_bond_inds[0]]],new_struct.atoms[node_to_struct_index_isomorphism[missing_bond_inds[1]]])
                     new_struct.remove_bond(bd)
-                    gen_structs.append(new_struct)
-                    tree_target_nodes.append(node.parent)
+                    if len(new_struct.split()) == 1:
+                        gen_structs.append(new_struct)
     
-    return gen_structs,tree_target_nodes 
+    return gen_structs
 
-def molecular_generative_extensions_from_tree_node(mol_decomp,node):
+def generative_extensions_from_tree_node(decomp,node,element_atomtypes):
+    """Generates generative extensions by following the tree up or down on individual decompositions
+    Currently assumes that the decompositions are labeling only (do not remove, modify, or add atoms apart from adding labels)
+    Args:
+        decomp: a decomposition of the generative group structure
+        node: the node the decomposition matches in the tree
+    """
+    #break this into two functions for modifying struct that matches a group to another group, one for when the other group is more specific
+    # and one for when the other group is more general, this will allow internal recursion of these algorithms when we hit mapping degeneracy
+    gen_structs = []
+    tree_target_nodes = []
+    delta = []
+    delta_var = []
+    
+    struct_to_node_isomorphisms = decomp.find_subgraph_isomorphisms(node.group,save_order=True)
+    
+    for child in node.children:
+        out_structs = extend_structure_from_group_to_specific_group(decomp,node.group,child.group,element_atomtypes,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+        gen_structs.extend(out_structs)
+        tree_target_nodes.extend([child]*len(out_structs))
+        delta.extend([child.rule.value-node.rule.value]*len(out_structs))
+        delta_var.extend([child.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
+        
+    out_structs = extend_structure_from_group_to_general_group(decomp,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+    gen_structs.extend(out_structs)
+    tree_target_nodes.extend([node.parent]*len(out_structs))
+    delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
+    delta_var.extend([node.parent.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
+    
+    return gen_structs,tree_target_nodes,delta,delta_var
+
+def molecular_generative_extensions_from_tree_node(mol_decomp,node,element_atomtypes):
     """Generates generative extensions by following the tree up or down on individual decompositions
     Currently assumes that the decompositions are labeling only (do not remove, modify, or add atoms apart from adding labels)
     Args:
