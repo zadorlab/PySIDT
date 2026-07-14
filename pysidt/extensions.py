@@ -4249,7 +4249,6 @@ def make_constrained_sample_molecule(struct,grp,node_to_struct_index_isomorphism
     
 def set_intersection_with_atom(target_atom,other_atom,element_atomtypes):
     #atomtype
-    atomtypes = []
     target_element_atomtypes = {el for atyp in target_atom.atomtype for el in get_atomtype_elements(atyp,element_atomtypes)}
     other_element_atomtypes = {el for atyp in other_atom.atomtype for el in get_atomtype_elements(atyp,element_atomtypes)}
     target_atom.atomtype = list(target_element_atomtypes.intersection(other_element_atomtypes))
