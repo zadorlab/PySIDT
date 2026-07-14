@@ -217,7 +217,7 @@ def molecular_take_generative_step(mol,
     generate_local_extensions=True,
     only_consider_objective_improving_extensions=False,
     extension_weighting={"shrink":0.2, "growth":0.2,  "transform":0.6},
-    maximum_size=40):
+    maximum_size=np.inf):
     """Takes an expansion step in the generative process.
 
     Args:
@@ -544,7 +544,7 @@ def molecular_generate_structure(mol,
     log_groups=False,
     generate_extensions_from_tree=True,
     generate_local_extensions=True,
-    maximum_size=40):
+    maximum_size=np.inf):
     """
     Generates
     Args:
