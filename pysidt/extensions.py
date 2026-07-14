@@ -7,13 +7,15 @@ import itertools
 try:
     from molecule.molecule.atomtype import ATOMTYPES, allElements, get_atomtype
     from molecule.molecule.element import bde_elements, PeriodicSystem, get_element
-    from molecule.molecule.group import GroupAtom, GroupBond
+    from molecule.molecule.group import GroupAtom, GroupBond, Group
     from molecule.molecule.molecule import Molecule, Atom, Bond
+    from molecule.exceptions import UnexpectedChargeError
 except:
     from rmgpy.molecule.atomtype import ATOMTYPES, allElements, get_atomtype
     from rmgpy.molecule.element import bde_elements, PeriodicSystem, get_element
-    from rmgpy.molecule.group import GroupAtom, GroupBond
+    from rmgpy.molecule.group import GroupAtom, GroupBond, Group
     from rmgpy.molecule.molecule import Molecule, Atom, Bond
+    from rmgpy.exceptions import UnexpectedChargeError
 
 from pysidt.utils import find_shortest_paths, evaluate_single
 from pysidt.mol import get_octet_deviation, get_atomtype_elements
