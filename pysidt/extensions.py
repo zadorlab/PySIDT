@@ -4009,6 +4009,7 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
 
 def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_node_isomorphisms=None):
     gen_structs = []
+    node_to_struct_index_isomorphism_record = []
     if struct_to_node_isomorphisms is None:
         struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
         
@@ -4037,22 +4038,18 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                         new_struct.vertices.insert(struct_index,newst_at)
                         for bd in gbds:
                             new_struct.add_bond(bd)
-                        logging.error("generated new parent struct based on mapped atom:")
-                        logging.error(new_struct.to_adjacency_list())
-                        logging.error(grp.to_adjacency_list())
                         if not new_struct.is_subgraph_isomorphic(grp,save_order=True):
-                            logging.error("was not subgraph isomorphic to node adding struct...")
                             gen_structs.append(new_struct)
+                            node_to_struct_index_isomorphism_record.append(node_to_struct_index_isomorphism)
                         else: #otherwise this individual change is not enough due to isomorphic degeneracy...recurse
-                            logging.error("still matches grp recursing...")
-                            gen_structs.extend(extend_structure_from_group_to_general_group(new_struct,grp,grpgen))
-                            logging.error("recursion finished")
+                            out_grps,node_to_struct_index_isomorphism_record_local = extend_structure_from_group_to_general_group(new_struct,grp,grpgen)
+                            gen_structs.extend(out_grps)
+                            node_to_struct_index_isomorphism_record.extend(node_to_struct_index_isomorphism_record_local)
                 else: #if the node is unmapped note it for further analysis
                     unmapped_node_indices.append(node_index)
             
             missing_bond_indices = []
             for bd in grp.get_all_edges(): #go through all node group bonds
-                logging.error(bd)
                 missing = False
                 node_index1 = grp.atoms.index(bd.vertex1)
                 node_index2 = grp.atoms.index(bd.vertex2)
@@ -4065,19 +4062,18 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                     missing = True
                 
                 if missing:
-                    logging.error(f"noting node bond not present in parent: {(node_index1,node_index2)}")
                     missing_bond_indices.append((node_index1,node_index2))
                 else:
                     parent_bd = grpgen.get_bond(grpgen.atoms[parent_index1],grpgen.atoms[parent_index2])
                     node_bd = grp.get_bond(grp.atoms[node_index1],grp.atoms[node_index2])
                     if not node_bd.equivalent(parent_bd): #if the bonds aren't the same adjust bond order to match parent, but not node
-                        logging.error("node and parent bonds not equivalent")
                         struct_index1 = node_to_struct_index_isomorphism[node_index1]
                         struct_index2 = node_to_struct_index_isomorphism[node_index2]
                         new_struct = struct.copy(deep=True)
                         bd = new_struct.get_bond(new_struct.atoms[struct_index1],new_struct.atoms[struct_index2])
                         bd.order = parent_bd.order
                         gen_structs.append(new_struct)
+                        node_to_struct_index_isomorphism_record.append(node_to_struct_index_isomorphism)
             #remove atoms/bonds, do not change the split of structures...remove all separate sets of connected atoms/bonds
             #cluster atoms/bonds
             unmapped_node_index_clusters = []
@@ -4107,7 +4103,9 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                 gen_atoms = [new_struct.atoms[node_to_struct_index_isomorphism[index]] for index in node_index_cluster]
                 for a in gen_atoms:
                     new_struct.remove_atom(a)
-                gen_structs.append(new_struct)
+                if len(new_struct.split()) == 1:
+                    gen_structs.append(new_struct)
+                node_to_struct_index_isomorphism_record.append(node_to_struct_index_isomorphism)
                 
             for missing_bond_inds in missing_bond_indices: #if they involved a removed atom we don't need to worry about them
                 if missing_bond_inds[0] in node_to_struct_index_isomorphism.keys() and missing_bond_inds[1] in node_to_struct_index_isomorphism.keys():
@@ -4116,8 +4114,9 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                     new_struct.remove_bond(bd)
                     if len(new_struct.split()) == 1:
                         gen_structs.append(new_struct)
+                        node_to_struct_index_isomorphism_record.append(node_to_struct_index_isomorphism)
     
-    return gen_structs
+    return gen_structs,node_to_struct_index_isomorphism_record
 
 def generative_extensions_from_tree_node(decomp,node,element_atomtypes):
     """Generates generative extensions by following the tree up or down on individual decompositions
