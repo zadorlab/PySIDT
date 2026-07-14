@@ -4152,20 +4152,49 @@ def generative_extensions_from_tree_node(decomp,node,element_atomtypes):
     
     return gen_structs,tree_target_nodes,delta,delta_var
 
-def molecular_generative_extensions_from_tree_node(mol_decomp,node,element_atomtypes):
+def molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes):
     """Generates generative extensions by following the tree up or down on individual decompositions
     Currently assumes that the decompositions are labeling only (do not remove, modify, or add atoms apart from adding labels)
     Args:
-        mol_decomp: a decomposition of the generative Molecule structure
+        decomp: a decomposition of the generative group structure
         node: the node the decomposition matches in the tree
     """
-    decomp = mol_decomp.to_group()
-    gen_structs,tree_target_nodes,delta,delta_var = generative_extensions_from_tree_node(decomp,node,element_atomtypes)
-    mol_structs = [st.make_sample_molecule() for st in gen_structs]
-    for i,st in enumerate(mol_structs):
-        assert st.is_subgraph_isomorphic(tree_target_nodes[i].group,save_order=True)
+    #break this into two functions for modifying struct that matches a group to another group, one for when the other group is more specific
+    # and one for when the other group is more general, this will allow internal recursion of these algorithms when we hit mapping degeneracy
+    gen_structs = []
+    tree_target_nodes = []
+    delta = []
+    delta_var = []
     
-    return mol_structs,delta,delta_var
+    if not isinstance(decomp,Group):
+        struct = decomp.to_group()
+    else:
+        struct = decomp
+    struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(node.group,save_order=True)
+    
+    for child in node.children:
+        output_structs = extend_structure_from_group_to_specific_group(struct,node.group,child.group,element_atomtypes,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+        out_structs = []
+        for st in output_structs:
+            st.clear_labeled_atoms()
+            try:
+                out_structs.append(st.make_sample_molecule()) #molecularizing the group makes it more specific so this is okay
+            except UnexpectedChargeError:
+                continue
+
+        gen_structs.extend(out_structs)
+        tree_target_nodes.extend([child]*len(out_structs))
+        delta.extend([child.rule.value-node.rule.value]*len(out_structs))
+        delta_var.extend([child.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
+        
+    out_structs,node_to_struct_index_isomorphism_record = extend_structure_from_group_to_general_group(struct,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+    out_structs = sum([make_constrained_sample_molecule(st,node.group,node_to_struct_index_isomorphism_record[i],element_atomtypes) for i,st in enumerate(out_structs)],[])
+    gen_structs.extend(out_structs)
+    tree_target_nodes.extend([node.parent]*len(out_structs))
+    delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
+    delta_var.extend([node.parent.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
+    
+    return gen_structs,tree_target_nodes,delta,delta_var #delta and delta_var here are probably terrible estimates...
 
 def make_constrained_sample_molecule(struct,grp,node_to_struct_index_isomorphism,element_atomtypes):
     atom_to_differentiating_atomtypes_map = dict()
