@@ -1420,7 +1420,7 @@ def get_molecular_extensions_for_generative_expansion(
     if generate_extensions_from_tree:
         for decomp,v,unc,tr in assoc_decomposition_init_value_unc:
             node = tree.nodes[tr]
-            structs,tree_nodes,delta,delta_var = molecular_generative_extensions_from_tree_node(decomp,node)
+            structs,tree_nodes,delta,delta_var = molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes=r)
             extents.extend([(st,None,node.name+"_Treegen","Treegen",None,delta[k],delta_var[k]) for k,st in enumerate(structs)])
 
     assert all(not np.isnan(x[-2]) for x in extents)
