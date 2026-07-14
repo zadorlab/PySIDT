@@ -652,4 +652,4 @@ def molecular_generate_structure(mol,
     
     maxind = np.argmax(objectives)
     
-    return structs[maxind],objectives[maxind]
+    return structs[maxind],objectives[maxind],structs,objectives
