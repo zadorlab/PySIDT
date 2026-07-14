@@ -4144,7 +4144,7 @@ def generative_extensions_from_tree_node(decomp,node,element_atomtypes):
         delta.extend([child.rule.value-node.rule.value]*len(out_structs))
         delta_var.extend([child.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
         
-    out_structs = extend_structure_from_group_to_general_group(decomp,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+    out_structs,_ = extend_structure_from_group_to_general_group(decomp,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
     gen_structs.extend(out_structs)
     tree_target_nodes.extend([node.parent]*len(out_structs))
     delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
