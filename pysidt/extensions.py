@@ -3940,7 +3940,6 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
     
     if struct_to_node_isomorphisms is None:
         struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
-    logging.error("{} isomorphisms between struct and grp".format(len(struct_to_node_isomorphisms)))
     struct_to_grp_index_isomorphisms = [{struct.atoms.index(a):grp.atoms.index(b) for a,b in iso.items()} for iso in struct_to_node_isomorphisms]
     node_to_struct_index_isomorphisms = [{grp.atoms.index(v):struct.atoms.index(k) for k,v in iso.items()} for iso in struct_to_node_isomorphisms]
     
@@ -3949,17 +3948,14 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
         child_to_node_isomorphisms = grpspec.find_intersection_isomorphisms(grp,save_order=True)
         node_to_child_isomorphisms = [{v:k for k,v in d.items()} for d in child_to_node_isomorphisms]
         node_to_child_index_isomorphisms = [{grp.atoms.index(node_at):grpspec.atoms.index(child_at) for node_at,child_at in iso.items()} for iso in node_to_child_isomorphisms]
-        logging.error("{} isomorphisms between node and child".format(len(child_to_node_isomorphisms)))
         for node_child_iso in node_to_child_index_isomorphisms:
             new_struct = struct.copy(deep=True)
             for struct_index,node_index in struct_node_iso.items(): #find node mapped atoms intersection, on these mappings we try to make every atom as specific as the child/specific group
                 if struct.atoms[struct_index].has_intersection_with(grpspec.atoms[node_child_iso[node_index]]):
                     set_intersection_with_atom(new_struct.atoms[struct_index],grpspec.atoms[node_child_iso[node_index]],element_atomtypes=element_atomtypes)
-                else:
-                    logging.error("Cannot intersect with grpspec") #if an atom cannot be made as specific as the child group we have to give up
+                else: #if an atom cannot be made as specific as the child group we have to give up
                     break #cannot make viable new_struct
             else:
-                logging.error("atoms are fixed now moving on to bonds...")
                 continuing = False
                 for bd in grpspec.get_all_edges(): #find node mapped bonds intersection, on these mappings we try to make every bond as specific as the child/specific group
                     ind1 = grpspec.atoms.index(bd.vertex1)
@@ -3976,7 +3972,6 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
                             if bd_struct.has_intersection_with(bd_child):
                                 set_intersection_with_bond(bd_struct,bd_child)
                             else:
-                                logging.error("continuing")
                                 continuing = True
                                 break
                         else: #bd_struct None => bd_node None so this is a new bond...so add that to struct
@@ -3985,7 +3980,6 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
                 if continuing:
                     continue
                 
-                logging.error("adding missing atoms/bonds")
                 #now add the missing atoms and associated bonds from the child to new_struct
                 child_node_iso = {v:k for k,v in node_child_iso.items()}
                 child_struct_iso = {child_node_iso[k]:v for k,v in node_struct_iso.items()}
@@ -4015,15 +4009,14 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
 
 def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_node_isomorphisms=None):
     gen_structs = []
-    
     if struct_to_node_isomorphisms is None:
         struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
-    logging.error("{} isomorphisms between struct and node".format(len(struct_to_node_isomorphisms)))
-    struct_to_grp_index_isomorphisms = [{struct.atoms.index(a):grp.atoms.index(b) for a,b in iso.items()} for iso in struct_to_node_isomorphisms]
+        
     node_to_struct_index_isomorphisms = [{grp.atoms.index(v):struct.atoms.index(k) for k,v in iso.items()} for iso in struct_to_node_isomorphisms]
     
     node_to_parent_isomorphisms = grp.find_subgraph_isomorphisms(grpgen,save_order=True)
     node_to_parent_index_isomorphisms = [{grp.atoms.index(a):grpgen.atoms.index(b) for a,b in iso.items()} for iso in node_to_parent_isomorphisms]
+    
     for node_to_parent_index_isomorphism in node_to_parent_index_isomorphisms:
         for node_to_struct_index_isomorphism in node_to_struct_index_isomorphisms:
             unmapped_node_indices = []
@@ -4032,7 +4025,6 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                     parent_index = node_to_parent_index_isomorphism[node_index]
                     p_at = grpgen.atoms[parent_index]
                     if not node_at.equivalent(p_at):
-                        logging.error(f"{(p_at,node_at)} were not equivalent")
                         struct_index = node_to_struct_index_isomorphism[node_index]
                         new_struct = struct.copy(deep=True)
                         st_at = new_struct.atoms[struct_index]
