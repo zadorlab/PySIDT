@@ -2823,6 +2823,10 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
     
     if pathlen is None and n_strucs_min == len(mol.split()): #internal bridge will reduce below minimum number of independent structures
         return []
+    elif pathlen is None and max_ring_gen_size != 2: #this choice allows it to create the connection, but at no length
+        pathlen = max_ring_gen_size 
+    elif pathlen is None and max_ring_gen_size == 2:
+        pathlen = 1
     
     atom_type_i = mol.atoms[i].atomtype
     atom_i_lone_bonded_atoms = [a for a in mol.atoms[i].bonds.keys() if len(a.bonds)==1]
