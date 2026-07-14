@@ -4167,6 +4167,60 @@ def molecular_generative_extensions_from_tree_node(mol_decomp,node,element_atomt
     
     return mol_structs,delta,delta_var
 
+def make_constrained_sample_molecule(struct,grp,node_to_struct_index_isomorphism,element_atomtypes):
+    atom_to_differentiating_atomtypes_map = dict()
+    for node_index,struct_index in node_to_struct_index_isomorphism.items():
+        if struct_index >= len(struct.atoms):
+            continue
+        target_atom = struct.atoms[struct_index]
+        other_atom = grp.atoms[node_index]
+        target_element_atomtypes = {el for atyp in target_atom.atomtype for el in get_atomtype_elements(atyp,element_atomtypes)}
+        other_element_atomtypes = {el for atyp in other_atom.atomtype for el in get_atomtype_elements(atyp,element_atomtypes)}
+        target_diff = list(target_element_atomtypes - other_element_atomtypes)
+        if len(target_diff) == len(target_element_atomtypes):
+            continue
+        else:
+            atom_to_differentiating_atomtypes_map[struct_index] = target_diff
+    
+    bond_to_differentiating_orders_map = dict()
+    for bdgen in grp.get_all_edges():
+        node_index1 = grp.atoms.index(bdgen.vertex1)
+        node_index2 = grp.atoms.index(bdgen.vertex2)
+        struct_index1 = node_to_struct_index_isomorphism[node_index1]
+        struct_index2 = node_to_struct_index_isomorphism[node_index2]
+        if struct_index1 >= len(struct.atoms) or struct_index2 >= len(struct.atoms) or not struct.has_bond(struct.atoms[struct_index1],struct.atoms[struct_index2]):
+            continue
+        bdst = struct.get_bond(struct.atoms[struct_index1],struct.atoms[struct_index2])
+        order_diff = list(set(bdst.order) - set(bdgen.order))
+        if len(order_diff) == len(bdst.order):
+            continue
+        else:
+            bond_to_differentiating_orders_map[(struct_index1,struct_index2)] = order_diff
+    
+    out_structs = []
+    for struct_index,target_diff in atom_to_differentiating_atomtypes_map.items():
+        for atyp in target_diff:
+            new_struct = struct.copy(deep=True)
+            new_struct.atoms[struct_index].atomtype = [atyp]
+            new_struct.clear_labeled_atoms()
+            try:
+                out_structs.append(new_struct.make_sample_molecule())
+            except UnexpectedChargeError:
+                continue
+    
+    for struct_inds,order_diff in bond_to_differentiating_orders_map.items():
+        for order in order_diff:
+            new_struct = struct.copy(deep=True)
+            bdnew = new_struct.get_bond(new_struct.atoms[struct_inds[0]],new_struct.atoms[struct_inds[1]])
+            bdnew.order = [order]
+            new_struct.clear_labeled_atoms()
+            try:
+                out_structs.append(new_struct.make_sample_molecule())
+            except UnexpectedChargeError:
+                continue
+    
+    return out_structs
+    
 def set_intersection_with_atom(target_atom,other_atom,element_atomtypes):
     #atomtype
     atomtypes = []
