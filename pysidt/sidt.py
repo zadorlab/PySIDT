@@ -1674,12 +1674,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
             if not unchanged:
                 # generate matrix
                 A = sp.lil_matrix((len(self.datums), len(nodes)))
-                
+
+                # index nodes so each piece's ancestor walk is O(depth) dict lookups instead of
+                # O(#nodes) `node in nodes`/`nodes.index(node)` scans (covdep-accel acceleration).
+                node_to_j = {node: j for j, node in enumerate(nodes)}
                 for i, datum in enumerate(self.datums):
                     for node in self.mol_node_maps[datum]["nodes"]:
                         while node is not None:
-                            if node in nodes:
-                                j = nodes.index(node)
+                            j = node_to_j.get(node)
+                            if j is not None:
                                 A[i, j] += 1.0
                             node = node.parent
 
@@ -2065,9 +2068,13 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             boo = True
             while boo:
                 for child in children:
-                    if child.group is None or ([k if not isinstance(v,list) else k*len(v) for k,v in child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in d.get_all_labeled_atoms().items()]) and d.is_subgraph_isomorphic(
+                    # NOTE: child-side list must be sorted() to match descend_node's training-time
+                    # routing (both sides sorted), and the whole `... and ...` must be parenthesized
+                    # so `child.group is None or (A and B)` binds correctly -- otherwise evaluation
+                    # descends pieces differently than training assigned them (covdep-accel fix).
+                    if child.group is None or (sorted([k if not isinstance(v,list) else k*len(v) for k,v in child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in d.get_all_labeled_atoms().items()]) and d.is_subgraph_isomorphic(
                         child.group, generate_initial_map=True, save_order=True
-                    ):
+                    )):
                         children = child.children
                         node = child
                         pred += node.rule.value
@@ -2197,11 +2204,13 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
 
             if not unchanged:
                 A = sp.lil_matrix((len(self.datums), len(nodes)))
+                # O(depth) dict lookups instead of O(#nodes) scans (covdep-accel acceleration).
+                node_to_j = {node: j for j, node in enumerate(nodes)}
                 for i, datum in enumerate(self.datums):
                     for node in self.mol_node_maps[datum]["nodes"]:
                         while node is not None:
-                            if node in nodes:
-                                j = nodes.index(node)
+                            j = node_to_j.get(node)
+                            if j is not None:
                                 A[i, j] += 1.0
                             node = node.parent
 
