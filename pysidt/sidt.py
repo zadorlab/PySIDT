@@ -15,7 +15,10 @@ from pysidt.regularization import simple_regularization
 from pysidt.decomposition import *
 from pysidt.utils import *
 import numpy as np
-import multiprocess as mp
+try:
+    import multiprocess as mp
+except ImportError:  # only needed for base-tree generate_tree(nprocs>1); MultiEval covdep path never uses it
+    mp = None
 import os
 import logging
 import json
@@ -517,6 +520,9 @@ class SubgraphIsomorphicDecisionTree:
         np.random.seed(0)
         self.check_subgraph_isomorphic()
         
+        if nprocs > 1 and mp is None:
+            raise ImportError("nprocs > 1 requires the optional 'multiprocess' package (pip install multiprocess)")
+
         if nprocs > 1 and (validation_set or scale_uncertainties):
             raise ValueError("Continuous postpruning tracking is not performant when running in parallel. To run in parallel specify validation_set=None and scale_uncertainties=False and after training (and regularization) use self.prune and self.scale_uncertainties")
         
