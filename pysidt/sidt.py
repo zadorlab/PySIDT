@@ -21,6 +21,7 @@ except ImportError:  # only needed for base-tree generate_tree(nprocs>1); MultiE
     mp = None
 import os
 import logging
+import time
 import json
 from sklearn import linear_model
 from scipy.optimize import minimize
@@ -1573,12 +1574,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         self.check_subgraph_isomorphic()
 
         logging.info("setting up data")
+        _t_phase = time.time()
         self.setup_data(data, check_data=check_data)
-        
+
         logging.info("descending data down the tree")
         if len(self.nodes) > 1:
             self.descend_training_from_top(only_specific_match=True)
-        
+        _t_setup = time.time() - _t_phase
+        _t_fit = _t_select = _t_extend = 0.0
+
         if alpha is None:
             if isinstance(data[0].value,(list, np.ndarray)):
                 alpha = dict()
@@ -1598,7 +1602,9 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         
         while True:
             logging.info("Fitting Tree")
+            _t_phase = time.time()
             self.fit_tree(alpha=alpha,update_cache=False)
+            _t_fit += time.time() - _t_phase
             if len(self.nodes) > max_nodes:
                 break
             self.new_nodes = []
@@ -1606,14 +1612,21 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 max(1, np.round(self.fract_nodes_expand_per_iter * len(self.nodes)))
             )
             logging.info("selecting nodes")
+            _t_phase = time.time()
             nodes = self.select_nodes(num=num)
+            _t_select += time.time() - _t_phase
             if not nodes:
                 logging.info("Did not find any nodes to expand")
                 break
             else:
+                _t_phase = time.time()
                 for node in nodes:
                     self.extend_tree_from_node(node)
-                
+                _t_extend += time.time() - _t_phase
+
+        logging.info("generate_tree phases [s]: setup+descent %.1f | fit %.1f | select %.1f | extend/extension-gen %.1f (%d nodes)",
+                     _t_setup, _t_fit, _t_select, _t_extend, len(self.nodes))
+
         if self.validation_set and postpruning_based_on_val:
             logging.info("Postpruning based on best validation error")
             nodes_to_remove = []
