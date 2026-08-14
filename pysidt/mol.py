@@ -5,6 +5,8 @@ except:
     from rmgpy.molecule import Group,GroupBond,GroupAtom
     from rmgpy.molecule.atomtype import ATOMTYPES
 
+import numpy as np
+
 def generate_bicyclic_groups(ring_size_max=9):
     out = []
     for ring_size in range(3,ring_size_max+1): #first ring
@@ -143,3 +145,43 @@ def get_atomtype_elements(atomtype,element_atomtypes):
             return generics
         else: #more general than one element
             return element_atomtypes
+        
+def get_ring_count_in_largest_fused_ring_system(mol):
+        """
+        Get the number of rings in the largest fused ring system in the molecule.
+        Returns 0 if the molecule has no fused rings (only monocycles or no rings).
+        """
+        polycycles = mol.get_polycycles()
+        if not polycycles:
+            return 0
+
+        sssr = mol.get_smallest_set_of_smallest_rings()
+        if not sssr:
+            return 0
+
+        sssr_sets = [set(r) for r in sssr]
+
+        ring_counts = list()
+        for polycycle in polycycles:
+            poly_set = set(polycycle)
+            ring_count = 0
+            for ring_set in sssr_sets:
+                if ring_set.issubset(poly_set):
+                    ring_count += 1
+            ring_counts.append(ring_count)
+
+        return max(ring_counts) if ring_counts else 0
+
+def invalidated_by_bredts_rule(mol):
+    """Checks if mol has higher order than single bonds at bridgehead carbons
+    for rings 8 or smaller this indicates mol is either unstable or 
+    very hard to synthesize
+    
+    Args:
+        mol (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    return any(any(bd.order > 1 for bd in a.bonds.values()) for a in mol.get_all_polycyclic_vertices())
+        
