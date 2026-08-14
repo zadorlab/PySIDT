@@ -18,7 +18,7 @@ except:
     from rmgpy.exceptions import UnexpectedChargeError
 
 from pysidt.utils import find_shortest_paths, evaluate_single
-from pysidt.mol import get_octet_deviation, get_atomtype_elements
+from pysidt.mol import *
 
 def split_mols(data, newgrp):
     """
@@ -1281,7 +1281,9 @@ def get_molecular_extensions_for_generative_expansion(
     decomposition_associated=None,
     generate_extensions_from_tree=True,
     generate_local_extensions=True,
-    maximum_size=np.inf,
+    max_heavy_atoms=np.inf,
+    max_fused_cluster_rings=np.inf,
+    enforce_bredts_rule=False,
     ):
     """
     generate all possible extensions that can be applied to a group structure and roughly estimate changes in prediction
@@ -1422,13 +1424,14 @@ def get_molecular_extensions_for_generative_expansion(
             node = tree.nodes[tr]
             structs,tree_nodes,delta,delta_var = molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes=r)
             extents.extend([(st,None,node.name+"_Treegen","Treegen",None,delta[k],delta_var[k]) for k,st in enumerate(structs)])
-
-    assert all(not np.isnan(x[-2]) for x in extents)
-    assert all(not np.isnan(x[-1]) for x in extents)
     
     unique_extents = []
     for ext in extents:
-        if len(ext[0].atoms) > maximum_size or ext[0].is_isomorphic(mol,save_order=True,strict=False):
+        if (not np.isinf(max_heavy_atoms) and len([a for a in ext[0].atoms if not a.is_hydrogen()]) > max_heavy_atoms) or (not np.isinf(max_fused_cluster_rings) and get_ring_count_in_largest_fused_ring_system(ext[0]) > max_fused_cluster_rings):
+            continue
+        if enforce_bredts_rule and invalidated_by_bredts_rule(ext[0]):
+            continue
+        if ext[0].is_isomorphic(mol,save_order=True,strict=False):
             continue
         for uext in unique_extents:
             if ext[0].is_isomorphic(uext[0],save_order=True,strict=False):
@@ -1508,8 +1511,11 @@ def molecular_transform_atom_extensions(
                 element = element_label
                 break
         
-            
+        
         atom = mol.atoms[i]
+        
+        if atom.element.symbol == element and (atom.radical_electrons == un or un == 'x') and (atom.site == site or site == 'x') and (atom.morphology == morph or morph == 'x') and (atom.lone_pairs == lone_pairs or lone_pairs == 'x'):
+            continue #same as atom
         
         old_atom_type_str = atom.atomtype.label
         
@@ -4007,7 +4013,10 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
     
     return gen_structs
 
-def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_node_isomorphisms=None):
+def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_node_isomorphisms=None,max_recursion_depth=2,recursion_depth=0):
+    if max_recursion_depth <= recursion_depth:
+        return [],[]
+    
     gen_structs = []
     node_to_struct_index_isomorphism_record = []
     if struct_to_node_isomorphisms is None:
@@ -4042,7 +4051,7 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                             gen_structs.append(new_struct)
                             node_to_struct_index_isomorphism_record.append(node_to_struct_index_isomorphism)
                         else: #otherwise this individual change is not enough due to isomorphic degeneracy...recurse
-                            out_grps,node_to_struct_index_isomorphism_record_local = extend_structure_from_group_to_general_group(new_struct,grp,grpgen)
+                            out_grps,node_to_struct_index_isomorphism_record_local = extend_structure_from_group_to_general_group(new_struct,grp,grpgen,max_recursion_depth=max_recursion_depth,recursion_depth=recursion_depth+1)
                             gen_structs.extend(out_grps)
                             node_to_struct_index_isomorphism_record.extend(node_to_struct_index_isomorphism_record_local)
                 else: #if the node is unmapped note it for further analysis
@@ -4140,12 +4149,13 @@ def generative_extensions_from_tree_node(decomp,node,element_atomtypes):
         tree_target_nodes.extend([child]*len(out_structs))
         delta.extend([child.rule.value-node.rule.value]*len(out_structs))
         delta_var.extend([child.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
-        
-    out_structs,_ = extend_structure_from_group_to_general_group(decomp,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
-    gen_structs.extend(out_structs)
-    tree_target_nodes.extend([node.parent]*len(out_structs))
-    delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
-    delta_var.extend([node.parent.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
+    
+    if node.parent.group is not None:
+        out_structs,_ = extend_structure_from_group_to_general_group(decomp,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+        gen_structs.extend(out_structs)
+        tree_target_nodes.extend([node.parent]*len(out_structs))
+        delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
+        delta_var.extend([node.parent.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
     
     return gen_structs,tree_target_nodes,delta,delta_var
 
@@ -4158,6 +4168,9 @@ def molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes
     """
     #break this into two functions for modifying struct that matches a group to another group, one for when the other group is more specific
     # and one for when the other group is more general, this will allow internal recursion of these algorithms when we hit mapping degeneracy
+    if node.group is None:
+        return [],[],[],[]
+    
     gen_structs = []
     tree_target_nodes = []
     delta = []
@@ -4183,14 +4196,15 @@ def molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes
         tree_target_nodes.extend([child]*len(out_structs))
         delta.extend([child.rule.value-node.rule.value]*len(out_structs))
         delta_var.extend([child.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
-        
-    out_structs,node_to_struct_index_isomorphism_record = extend_structure_from_group_to_general_group(struct,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
-    out_structs = sum([make_constrained_sample_molecule(st,node.group,node_to_struct_index_isomorphism_record[i],element_atomtypes) for i,st in enumerate(out_structs)],[])
-    gen_structs.extend(out_structs)
-    tree_target_nodes.extend([node.parent]*len(out_structs))
-    delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
-    delta_var.extend([node.parent.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
     
+    if node.parent.group is not None:
+        out_structs,node_to_struct_index_isomorphism_record = extend_structure_from_group_to_general_group(struct,node.group,node.parent.group,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
+        out_structs = sum([make_constrained_sample_molecule(st,node.group,node_to_struct_index_isomorphism_record[i],element_atomtypes) for i,st in enumerate(out_structs)],[])
+        gen_structs.extend(out_structs)
+        tree_target_nodes.extend([node.parent]*len(out_structs))
+        delta.extend([node.parent.rule.value-node.rule.value]*len(out_structs))
+        delta_var.extend([node.parent.rule.uncertainty - node.rule.uncertainty]*len(out_structs))
+        
     return gen_structs,tree_target_nodes,delta,delta_var #delta and delta_var here are probably terrible estimates...
 
 def make_constrained_sample_molecule(struct,grp,node_to_struct_index_isomorphism,element_atomtypes):
