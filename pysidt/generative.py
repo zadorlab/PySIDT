@@ -40,6 +40,7 @@ def take_generative_step(grp,
     specification_extensions_only=False,
     skip_specification_zero_delta_extensions=False,
     only_consider_objective_improving_extensions=False,
+    optimize=False,
     extension_weighting={"shrink":0.2, "growth":0.2, "genspec":0.1, "spec":0.5}):
     """Takes an expansion step in the generative process.
 
@@ -224,8 +225,11 @@ def molecular_take_generative_step(mol,
     generate_extensions_from_tree=True,
     generate_local_extensions=True,
     only_consider_objective_improving_extensions=False,
+    optimize=False,
     extension_weighting={"shrink":0.2, "growth":0.2,  "transform":0.6},
-    maximum_size=np.inf):
+    max_heavy_atoms=np.inf,
+    max_fused_cluster_rings=np.inf,
+    enforce_bredts_rule=False):
     """Takes an expansion step in the generative process.
 
     Args:
@@ -274,13 +278,17 @@ def molecular_take_generative_step(mol,
         max_ring_gen_size=max_ring_gen_size,
         decomposition_associated=decomposition_associated,
         generate_extensions_from_tree=generate_extensions_from_tree,
-        maximum_size=maximum_size,
+        max_heavy_atoms=max_heavy_atoms,
+        max_fused_cluster_rings=max_fused_cluster_rings,
+        enforce_bredts_rule=enforce_bredts_rule,
 )
     if not extents:
         raise ValueError("No candidate extensions generated for the group")
 
     deltas = np.array([x[-2] for x in extents])
+    ext_values = deltas + init_values
     delta_vars = np.array([x[-1] for x in extents])
+    ext_uncertainties = delta_vars + init_uncertainties 
     
     rough_target_deltas = np.array([
         target_function(extents[i][0],
@@ -301,6 +309,8 @@ def molecular_take_generative_step(mol,
     
     target_deltas_exact = []
     target_uncertainty_deltas_exact = []
+    ext_values_exact = []
+    ext_uncertainties_exact = []
     for i in exact_inds:
         ext = extents[i]
         grp = ext[0]
@@ -308,6 +318,8 @@ def molecular_take_generative_step(mol,
         new_target_delta = target_function(grp,new_target_values,new_target_uncertainties) - init_target
         target_deltas_exact.append(new_target_delta)
         target_uncertainty_deltas_exact.append(new_target_uncertainties - init_uncertainties)
+        ext_values_exact.append(new_target_values)
+        ext_uncertainties_exact.append(new_target_uncertainties)
         
     target_deltas_exact = np.array(target_deltas_exact)
     target_uncertainty_deltas_exact = np.array(target_uncertainty_deltas_exact)
@@ -315,19 +327,52 @@ def molecular_take_generative_step(mol,
     target_deltas = rough_target_deltas
     target_deltas[exact_inds] = np.array(target_deltas_exact)
     
+    ext_values[exact_inds] = np.array(ext_values_exact)
+    ext_uncertainties_exact = np.array(ext_uncertainties_exact)
+    
+    if optimize:
+        index = np.argmax(target_deltas)
+        max_delta_val = target_deltas[index]
+        if max_delta_val < 0:
+           return None,None,None,None,None,None,None,None,None
+        else:
+            if index in exact_inds:
+                eind = exact_inds.tolist().index(index)
+                extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
+                return extents[index] + (ext_values[index], ext_uncertainties[index])
+            else:
+                new_target_values, new_target_uncertainties = tree.evaluate(extents[index][0], estimate_uncertainty=True)
+                new_target_delta = target_function(extents[index][0],new_target_values,new_target_uncertainties) - init_target
+                new_uncertainty_delta = new_target_uncertainties - init_uncertainties
+                extents[index] = extents[index][:-2] + (new_target_delta, new_uncertainty_delta)
+            return extents[index] + (new_target_values, new_target_uncertainties, ) 
+    
     # print("Target deltas for candidate extensions:", target_deltas)
     probs = weighting_function(target_deltas)
-
-    assert all(probs >= 0), "Weighting function returned negative probabilities"
+    
+    assert np.nansum(probs) != 0, target_deltas
+    
+    naninds = np.isnan(probs)
+    Nnan = sum(naninds)
+    if Nnan> 0 and Nnan != len(probs):
+        logging.warning("Weighting function returned {} NaN probabilities".format(len(naninds)))
+        probs[naninds] = 0
+    elif Nnan == len(probs):
+        logging.error("Weighting function returned all NaN probabilities")
+        raise ValueError(target_deltas)
+    
+    assert sum(np.isnan(probs)) == 0
+    assert all(probs >= 0), ("Weighting function returned negative probabilities",target_deltas,probs)
     
     ext_classes = np.unique([x[-4] for x in extents])
     ext_class_dict = {ext_class:0 for ext_class in ext_classes}
     
     is_nonnegative_target_delta = any(target_deltas > 0)
     
-    shrink_inds = np.array([i for i,ext in enumerate(extents) if len(ext[0].atoms) < len(mol.atoms)])
-    growth_inds = np.array([i for i,ext in enumerate(extents) if len(ext[0].atoms) > len(mol.atoms)])
-    transform_inds = np.array([i for i,ext in enumerate(extents) if len(ext[0].atoms) == len(mol.atoms)])
+    Nmolheavy = len([a for a in mol.atoms if not a.is_hydrogen()])
+    shrink_inds = np.array([i for i,ext in enumerate(extents) if len([a for a in ext[0].atoms if not a.is_hydrogen()]) < Nmolheavy])
+    growth_inds = np.array([i for i,ext in enumerate(extents) if len([a for a in ext[0].atoms if not a.is_hydrogen()]) > Nmolheavy])
+    transform_inds = np.array([i for i,ext in enumerate(extents) if len([a for a in ext[0].atoms if not a.is_hydrogen()]) == Nmolheavy])
     
     for i,ext in enumerate(extents):
         if is_nonnegative_target_delta and only_consider_objective_improving_extensions and target_deltas[i] <= 0:
@@ -357,7 +402,9 @@ def molecular_take_generative_step(mol,
     logging.error(ext_class_dict)
     
     ext_class_dict = {ext_class:0 for ext_class in ext_classes}
-    probs = probs / np.sum(probs)
+    Sprob = np.sum(probs)
+    assert Sprob > 0
+    probs = probs / Sprob
     
     for i,ext in enumerate(extents):
         ext_class_dict[ext[-4]] += probs[i]
@@ -376,7 +423,7 @@ def molecular_take_generative_step(mol,
         extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
         return extents[index] + (new_target_values, new_target_uncertainties)
     else:
-        new_target_values, new_target_uncertainties = tree.evaluate(grp, estimate_uncertainty=True)
+        new_target_values, new_target_uncertainties = tree.evaluate(extents[index][0], estimate_uncertainty=True)
         new_target_delta = target_function(extents[index][0],new_target_values,new_target_uncertainties) - init_target
         new_uncertainty_delta = new_target_uncertainties - init_uncertainties
         extents[index] = extents[index][:-2] + (new_target_delta, new_uncertainty_delta)
