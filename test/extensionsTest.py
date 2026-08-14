@@ -114,4 +114,103 @@ class TestExtensionGeneration:
                     break
             else:
                 assert False, f"Unexpected Extension {m.to_smiles()} generated in molecular_transform_bond_extensions from propane"
+    
+#     def test_generative_extensions_from_tree_node(self):
+#         decomp = Group().from_adjacency_list("""1 * N u0 {2,D}
+#         2 [C,O] u0 {1,D}""")
+#         value,name = evaluate_single(tree, decomp, trace=True)
+#         node = tree.nodes[name]
+        
+#         grpsout = [Group().from_adjacency_list("""1 N     u0 {2,D}
+# 2 [C,O] u0 {1,D} {3,[S,D,T,B]}
+# 3 Rx!H  ux {2,[S,D,T,B]}"""),
+#                    Group().from_adjacency_list("""1 * N u0""")]
+        
+#         new_grps,nodes,delta,delta_unc = generative_extensions_from_tree_node(decomp,node,[ATOMTYPES[x] for x in ["C", "O", "N"]])
+        
+#         gmap = dict()
+#         for gnew in new_grps:
+#             for gout in grpsout:
+#                 if gnew.is_isomorphic(gout,save_order=True):
+#                     gmap[gnew] = gout
+#                     break
+        
+#         assert len(gmap) == len(new_grps) and len(new_grps) == len(grpsout), "Group mismatch"
+        
+    # def test_get_molecular_extensions_for_generative_expansion(self):
+        
+    #     mol = Molecule(smiles="CCC")
+        
+    #     exts = get_molecular_extensions_for_generative_expansion(
+    #         mol,
+    #         None,
+    #         atom_decomposition_noH,
+    #         r_full = [ATOMTYPES[x] for x in ["C", "O", "N"]],
+    #         r_bonds_full=[1, 2, 3], #, 1.5],
+    #         r_un_full=[0],
+    #         r_site_full=[],
+    #         r_morph_full=[],
+    #         r_ncoord_full=[],
+    #         r_label=None,
+    #         basename="Root",
+    #         n_strucs_min=1,
+    #         n_strucs_max=1,
+    #         max_ring_gen_size=9,
+    #         decomposition_associated=None,
+    #         generate_extensions_from_tree=False,
+    #         generate_local_extensions=True,
+    #         )
+        
+    #     smsout = ['CCC',
+    #         'CCO',
+    #         'CCN',
+    #         'CCCC',
+    #         'CCCO',
+    #         'CCCN',
+    #         'CC',
+    #         'CCC1CC1',
+    #         'CCC1CCC1',
+    #         'CCC1CCCC1',
+    #         'CCC1CCCCC1',
+    #         'CCC1CCCCCC1',
+    #         'CCC1CCCCCCC1',
+    #         'CCC1CCCCCCCC1',
+    #         'COC',
+    #         'CNC',
+    #         'CC(C)C',
+    #         'CC(C)O',
+    #         'CC(N)C',
+    #         'C=CC',
+    #         'C#CC',
+    #         'CC1(C)CC1',
+    #         'CC1(C)CCC1',
+    #         'CC1(C)CCCC1',
+    #         'CC1(C)CCCCC1',
+    #         'CC1(C)CCCCCC1',
+    #         'CC1(C)CCCCCCC1',
+    #         'CC1(C)CCCCCCCC1',
+    #         'C1CC1',
+    #         'C1CCC1',
+    #         'C1CCCC1',
+    #         'C1CCCCC1',
+    #         'C1CCCCCC1',
+    #         'C1CCCCCCC1',
+    #         'C1CCCCCCCC1']
+        
+    #     msout = [Molecule(smiles=sm) for sm in smsout]
+        
+    #     for ext in exts:
+    #         for m in msout:
+    #             if ext[0].is_isomorphic(m,save_order=True):
+    #                 break
+    #         else:
+    #             assert False, "Molecule {} generated was not expected".format(ext[0].to_smiles())
+        
+        
+    #     for m in msout:
+    #         for ext in exts:
+    #             if ext[0].is_isomorphic(m,save_order=True):
+    #                 break
+    #         else:
+    #             assert False, "Expected Molecule {} was not generated".format(m.to_smiles())
         
