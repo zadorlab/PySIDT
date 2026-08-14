@@ -597,11 +597,14 @@ def molecular_generate_structure(mol,
     max_ring_gen_size=None,
     decomposition_associated=None,
     fraction_to_compute_exactly=0.1,
-    iters_per_nstruct=20,
+    iters=50,
     log_groups=False,
     generate_extensions_from_tree=True,
     generate_local_extensions=True,
-    maximum_size=np.inf):
+    optimize=False,
+    max_heavy_atoms=np.inf,
+    max_fused_cluster_rings=np.inf,
+    enforce_bredts_rule=False):
     """
     Generates
     Args:
@@ -637,10 +640,11 @@ def molecular_generate_structure(mol,
     structs = [struct]
     v,unc = tree.evaluate(struct,estimate_uncertainty=True)
     objectives = [target_function(struct,v,unc)]
-    while True:
-        print(f"Iteration {iter}, Stage {stage}, Number of atoms: {len(struct.atoms)}")
-        print(struct.to_adjacency_list())
-        if stage == 1: #get up to the size scale of the system
+    
+    if optimize:
+        while True:
+            print(f"Iteration {iter}, Stage {stage}, Number of atoms: {len(struct.atoms)}")
+            print(struct.to_adjacency_list())
             struct, _, name, typename, tup, delta_v, delta_var, target_values, target_uncertainties = molecular_take_generative_step(
                 struct,
                 target_function,
@@ -663,15 +667,25 @@ def molecular_generate_structure(mol,
                 fraction_to_compute_exactly=fraction_to_compute_exactly,
                 generate_extensions_from_tree=generate_extensions_from_tree,
                 generate_local_extensions=generate_local_extensions,
-                maximum_size=maximum_size)
+                optimize=optimize,
+                max_heavy_atoms=max_heavy_atoms,
+                max_fused_cluster_rings=max_fused_cluster_rings,
+                enforce_bredts_rule=enforce_bredts_rule)
             
-            if len(struct.atoms) < Nstruct:
-                Nstruct_stage_2 = Nstruct
-                stage = 2
-                logging.info("Moving to stage 2 at structure size %d", Nstruct_stage_2)
-            Nstruct = len(struct.atoms)
+            if struct is not None:
+                objective = target_function(struct, target_values, target_uncertainties)
+                print(f"Selected extension: {typename}, {tup}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
+                structs.append(struct)
+                objectives.append(objective)
+                iter += 1
+            else:
+                return structs[-1],objectives[-1],structs,objectives
             
-        elif stage == 2: #generative refinement
+    else:
+        for iter in range(iters):
+            print(f"Iteration {iter+1}, Stage {stage}, Number of atoms: {len(struct.atoms)}")
+            print(struct.to_adjacency_list())
+            
             struct, _, name, typename, tup, delta_v, delta_var, target_values, target_uncertainties = molecular_take_generative_step(
                 struct,
                 target_function,
@@ -694,18 +708,15 @@ def molecular_generate_structure(mol,
                 fraction_to_compute_exactly=fraction_to_compute_exactly,
                 generate_extensions_from_tree=generate_extensions_from_tree,
                 generate_local_extensions=generate_local_extensions,
-                maximum_size=maximum_size)
-            iter_stage_2 += 1
-            if iter_stage_2 > iters_per_nstruct * Nstruct_stage_2:
-                stage = 3
+                optimize=optimize,
+                max_heavy_atoms=max_heavy_atoms,
+                max_fused_cluster_rings=max_fused_cluster_rings,
+                enforce_bredts_rule=enforce_bredts_rule)
 
-        objective = target_function(struct, target_values, target_uncertainties)
-        print(f"Selected extension: {typename}, {tup}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
-        structs.append(struct)
-        objectives.append(objective)
-        iter += 1
-        if stage == 3:
-            break
+            objective = target_function(struct, target_values, target_uncertainties)
+            print(f"Selected extension: {typename}, {tup}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
+            structs.append(struct)
+            objectives.append(objective)
     
     maxind = np.argmax(objectives)
     
