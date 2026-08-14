@@ -6,9 +6,17 @@ from pysidt.utils import evaluate_single
 def sum_min_weighting(target_values):
     return (target_values - np.min(target_values)) / np.sum(target_values - np.min(target_values))
 
-def exp_neg_weighting(target_values,b):
+def exp_neg_weighting(target_values,b,max_val=1e100,min_val=1e-100):
     exp_vals = np.exp(-b * target_values)
-    return exp_vals / np.sum(exp_vals)
+    exp_vals[np.isinf(exp_vals)] = max_val
+    exp_vals[exp_vals == 0] = min_val
+    s = np.sum(exp_vals)
+    if s == 0:
+        return np.zeros(len(target_values))
+    else:
+        out = exp_vals/s
+        assert not np.isnan(out).any(), (exp_vals,s)
+        return exp_vals/s
 
 def take_generative_step(grp,
     target_function,
