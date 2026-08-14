@@ -2400,7 +2400,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             if node.rule.uncertainty is None:
                 node.rule.uncertainty = node.parent.rule.uncertainty
             elif node.rule.num_data == 0:
-                node.rule.uncertainty = 0.0 #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
+                node.rule.uncertainty = np.zeros(self.target_num) #if n=0 the LASSO should drive node.rule.value to zero so there should be approximately no variance contribution 
         
     def select_nodes(self, num=1):
         """
