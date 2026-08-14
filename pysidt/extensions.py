@@ -2813,6 +2813,8 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
         mapping = {k: newmol.atoms[k] for k in range(len(newmol.atoms))}
         
         tail_atom = newmol.atoms[i]
+        head_atom = newmol.atoms[j]
+        
         tail_atom_remove_atom = [a for a in tail_atom.bonds.keys() if len(a.bonds) == 1]
         if len(tail_atom_remove_atom) == 0:
             break
@@ -2821,7 +2823,6 @@ def molecular_specify_internal_new_bond_extensions(mol, i, j, n_strucs_min, base
             
         newmol.remove_atom(tail_atom_remove_atom)
         
-        head_atom = newmol.atoms[j]
         head_atom_remove_atom = [a for a in head_atom.bonds.keys() if len(a.bonds) == 1]
         if len(head_atom_remove_atom) == 0:
             break
