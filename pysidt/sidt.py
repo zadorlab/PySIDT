@@ -2522,7 +2522,7 @@ class MultiTargetMultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgr
             confidence_levels, proportion_correct = get_calibration_curve(errs, scaled_uncs, n)
             return np.nansum((proportion_correct - confidence_levels)**2)
             
-        for target_ind in range(len(self.target_num)):
+        for target_ind in range(self.target_num):
             result = minimize(objective_function, initial_scaling_factor, args=(np.array([x[target_ind] for x in val_error]), np.array([x[target_ind] for x in val_uncertainties])), method="Nelder-Mead")
             optimized_scaling_factor = result.x[0]
             logging.info(f"Scaling Node Uncertainties by Optimized Scaling Factor {optimized_scaling_factor**2:.3f}")
