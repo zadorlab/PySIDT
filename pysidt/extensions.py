@@ -3925,10 +3925,10 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
                             new_struct.add_bond(new_bd)
                 if continuing:
                     continue
-                
+                    
                 #now add the missing atoms and associated bonds from the child to new_struct
-                child_node_iso = {v:k for k,v in node_child_iso.items()}
-                child_struct_iso = {child_node_iso[k]:v for k,v in node_struct_iso.items()}
+                child_struct_iso = {node_child_iso[k]:v for k,v in node_struct_iso.items()}
+                continuing = False
                 while len(child_struct_iso) < len(grpspec.atoms):
                     map_len = len(child_struct_iso)
                     for i,a in enumerate(grpspec.atoms):
@@ -3943,13 +3943,45 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
                             for mapped_bonded_ind in mapped_bonded_inds:
                                 child_bond = grpspec.get_bond(grpspec.atoms[i],grpspec.atoms[mapped_bonded_ind])
                                 st_atom = new_struct.atoms[child_struct_iso[mapped_bonded_ind]]
+                                if st_atom.lone_pairs:
+                                    lone_pairs = min(st_atom.lone_pairs)
+                                else:
+                                    lone_pairs = 0
+                                if st_atom.radical_electrons:
+                                    radical_electrons = min(st_atom.radical_electrons)
+                                else:
+                                    radical_electrons = 0
+                                minimum_octet =  sum(min(bd.order) for bd in st_atom.bonds.values())*2 + lone_pairs + radical_electrons + 2*min(child_bond.order)
+                                if minimum_octet > 8: #if adding this bond would violate octet rule try to remove Hydrogen's
+                                    lone_bonded_atoms = [a for a in st_atom.bonds.keys() if len(a.bonds) == 1 and new_struct.atoms.index(a) not in child_struct_iso.values() and a not in atoms_to_remove]
+                                    lone_bond_ind = 0
+                                    octet_change = 0
+                                    while minimum_octet + octet_change > 8:
+                                        if lone_bond_ind >= len(lone_bonded_atoms): #unable to fix octet violation
+                                            continuing = True
+                                            break
+                                        lone_order = min(st_atom.bonds[lone_bonded_atoms[lone_bond_ind]].order)
+                                        if new_struct.atoms.index(lone_bonded_atoms[lone_bond_ind]) not in child_struct_iso.values():
+                                            atoms_to_remove.append(lone_bonded_atoms[lone_bond_ind])
+                                            lone_bond_ind += 1
+                                            octet_change -= lone_order*2
+                                if continuing:
+                                    break
                                 gbd = GroupBond(st_atom,newga,order=child_bond.order)
                                 new_struct.add_bond(gbd)
-                                
-                
-                assert new_struct.is_subgraph_isomorphic(grpspec, save_order=True)
-                new_struct.clear_labeled_atoms()
-                gen_structs.append(new_struct)
+
+                    if continuing:
+                        break
+                       
+                if not continuing:
+                    for a in atoms_to_remove:
+                        new_struct.remove_atom(a)
+
+                    if not new_struct.is_subgraph_isomorphic(grp, save_order=True, check_labels=True) or not new_struct.is_subgraph_isomorphic(grpspec, save_order=True, check_labels=True):
+                        raise ValueError("Generated structure is not isomorphic to a group.")
+
+                    new_struct.clear_labeled_atoms()
+                    gen_structs.append(new_struct)
     
     return gen_structs
 
