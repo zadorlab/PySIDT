@@ -4161,7 +4161,7 @@ def molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes
             st.clear_labeled_atoms()
             try:
                 out_structs.append(st.make_sample_molecule()) #molecularizing the group makes it more specific so this is okay
-            except UnexpectedChargeError:
+            except (AtomTypeError,UnexpectedChargeError):
                 continue
 
         gen_structs.extend(out_structs)
@@ -4217,7 +4217,7 @@ def make_constrained_sample_molecule(struct,grp,node_to_struct_index_isomorphism
             new_struct.clear_labeled_atoms()
             try:
                 out_structs.append(new_struct.make_sample_molecule())
-            except UnexpectedChargeError:
+            except (UnexpectedChargeError, AtomTypeError) as e:
                 continue
     
     for struct_inds,order_diff in bond_to_differentiating_orders_map.items():
@@ -4228,7 +4228,7 @@ def make_constrained_sample_molecule(struct,grp,node_to_struct_index_isomorphism
             new_struct.clear_labeled_atoms()
             try:
                 out_structs.append(new_struct.make_sample_molecule())
-            except UnexpectedChargeError:
+            except (UnexpectedChargeError, AtomTypeError) as e:
                 continue
     
     return out_structs
