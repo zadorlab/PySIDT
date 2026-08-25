@@ -9,13 +9,13 @@ try:
     from molecule.molecule.element import bde_elements, PeriodicSystem, get_element
     from molecule.molecule.group import GroupAtom, GroupBond, Group
     from molecule.molecule.molecule import Molecule, Atom, Bond
-    from molecule.exceptions import UnexpectedChargeError
+    from molecule.exceptions import UnexpectedChargeError, AtomTypeError
 except:
     from rmgpy.molecule.atomtype import ATOMTYPES, allElements, get_atomtype
     from rmgpy.molecule.element import bde_elements, PeriodicSystem, get_element
     from rmgpy.molecule.group import GroupAtom, GroupBond, Group
     from rmgpy.molecule.molecule import Molecule, Atom, Bond
-    from rmgpy.exceptions import UnexpectedChargeError
+    from rmgpy.exceptions import UnexpectedChargeError, AtomTypeError
 
 from pysidt.utils import find_shortest_paths, evaluate_single
 from pysidt.mol import *
@@ -3895,7 +3895,9 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
         node_to_child_isomorphisms = [{v:k for k,v in d.items()} for d in child_to_node_isomorphisms]
         node_to_child_index_isomorphisms = [{grp.atoms.index(node_at):grpspec.atoms.index(child_at) for node_at,child_at in iso.items()} for iso in node_to_child_isomorphisms]
         for node_child_iso in node_to_child_index_isomorphisms:
+            child_node_iso = {v:k for k,v in node_child_iso.items()}
             new_struct = struct.copy(deep=True)
+            atoms_to_remove = []
             for struct_index,node_index in struct_node_iso.items(): #find node mapped atoms intersection, on these mappings we try to make every atom as specific as the child/specific group
                 if struct.atoms[struct_index].has_intersection_with(grpspec.atoms[node_child_iso[node_index]]):
                     set_intersection_with_atom(new_struct.atoms[struct_index],grpspec.atoms[node_child_iso[node_index]],element_atomtypes=element_atomtypes)
@@ -3903,16 +3905,14 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
                     break #cannot make viable new_struct
             else:
                 continuing = False
-                for bd in grpspec.get_all_edges(): #find node mapped bonds intersection, on these mappings we try to make every bond as specific as the child/specific group
-                    ind1 = grpspec.atoms.index(bd.vertex1)
-                    ind2 = grpspec.atoms.index(bd.vertex2)
-                    if ind1 in node_struct_iso.keys() and ind2 in node_struct_iso.keys():
-                        if new_struct.has_bond(new_struct.atoms[node_struct_iso[ind1]],new_struct.atoms[node_struct_iso[ind2]]):
-                            bd_struct = new_struct.get_bond(new_struct.atoms[node_struct_iso[ind1]],new_struct.atoms[node_struct_iso[ind2]])
+                for bd_child in grpspec.get_all_edges(): #find node mapped bonds intersection, on these mappings we try to make every bond as specific as the child/specific group
+                    ind1 = grpspec.atoms.index(bd_child.vertex1)
+                    ind2 = grpspec.atoms.index(bd_child.vertex2)
+                    if ind1 in child_node_iso.keys() and ind2 in child_node_iso.keys():
+                        if new_struct.has_bond(new_struct.atoms[node_struct_iso[child_node_iso[ind1]]],new_struct.atoms[node_struct_iso[child_node_iso[ind2]]]):
+                            bd_struct = new_struct.get_bond(new_struct.atoms[node_struct_iso[child_node_iso[ind1]]],new_struct.atoms[node_struct_iso[child_node_iso[ind2]]])
                         else:
                             bd_struct = None
-                        
-                        bd_child = grpspec.get_bond(grpspec.atoms[ind1],grpspec.atoms[ind2])
 
                         if bd_struct and bd_child:
                             if bd_struct.has_intersection_with(bd_child):
@@ -3921,7 +3921,7 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
                                 continuing = True
                                 break
                         else: #bd_struct None => bd_node None so this is a new bond...so add that to struct
-                            new_bd = GroupBond(new_struct.atoms[node_struct_iso[ind1]],new_struct.atoms[node_struct_iso[ind2]],order=bd_child.order)
+                            new_bd = GroupBond(new_struct.atoms[node_struct_iso[child_node_iso[ind1]]],new_struct.atoms[node_struct_iso[child_node_iso[ind2]]],order=bd_child.order)
                             new_struct.add_bond(new_bd)
                 if continuing:
                     continue
