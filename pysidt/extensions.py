@@ -4246,12 +4246,10 @@ def set_intersection_with_atom(target_atom,other_atom,element_atomtypes):
     
     if "Ncoord" in target_atom.props.keys() and target_atom.props["Ncoord"] and "Ncoord" in other_atom.props.keys() and other_atom.props["Ncoord"]:
         target_atom.props["Ncoord"] = list(set(target_atom.props["Ncoord"]).intersection(set(other_atom.props["Ncoord"])))
-    elif "Ncoord" in target_atom.props.keys() and other_atom.props["Ncoord"]:
+    elif "Ncoord" in other_atom.props.keys() and other_atom.props["Ncoord"] is not None:
         target_atom.props["Ncoord"] = other_atom.props["Ncoord"]
     
-    if "inRing" in target_atom.props.keys() and target_atom.props["inRing"] is not None and "inRing" in other_atom.props.keys() and other_atom.props["inRing"] is not None:
-        target_atom.props["inRing"] = list(set(target_atom.props["inRing"]).intersection(set(other_atom.props["inRing"])))
-    elif "inRing" in other_atom.props.keys() and other_atom.props["inRing"] is not None:
+    if "inRing" in other_atom.props.keys() and other_atom.props["inRing"] is not None:
         target_atom.props["inRing"] = other_atom.props["inRing"]
     
 def set_intersection_with_bond(target_bond,other_bond):
