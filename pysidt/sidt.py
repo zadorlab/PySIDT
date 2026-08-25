@@ -457,7 +457,7 @@ class SubgraphIsomorphicDecisionTree:
         self.nodes[name] = node
         parent.children.append(node)
         self.fit_node(node)
-        if grpc and all(st.mol.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
+        if grpc and all(st.mol.is_subgraph_isomorphic(grpc,save_order=True,check_labels=True) for st in comp):
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
             cextname = ""
@@ -499,8 +499,8 @@ class SubgraphIsomorphicDecisionTree:
         for child in node.children:
             data_to_add = []
             for datum in node.items:
-                if datum.mol.is_subgraph_isomorphic(
-                    child.group, generate_initial_map=True, save_order=True
+                if datum.mol.has_same_labels(child.group,ignore_labels=self.r_label) and datum.mol.is_subgraph_isomorphic(
+                    child.group, save_order=True, check_labels=True
                 ):
                     data_to_add.append(datum)
 
@@ -549,7 +549,7 @@ class SubgraphIsomorphicDecisionTree:
             if self.validation_set:
                 val_set_subtree = []
                 for d in self.validation_set: #only validate against validation set items that would evaluate on this subtree
-                    if d.mol.is_subgraph_isomorphic(n.group, generate_initial_map=True, save_order=True):
+                    if d.mol.has_same_labels(n.group,ignore_labels=self.r_label) and d.mol.is_subgraph_isomorphic(n.group, save_order=True, check_labels=True):
                         val_set_subtree.append(d)
             else:
                 val_set_subtree = None
@@ -565,14 +565,14 @@ class SubgraphIsomorphicDecisionTree:
             for datum in data:
                 if self.root.group:
                     if not datum.mol.is_subgraph_isomorphic(
-                        self.root.group, generate_initial_map=True, save_order=True
+                        self.root.group, save_order=True, check_labels=True
                     ):
                         logging.info("Datum did not match Root node:")
                         logging.info(datum.mol.to_adjacency_list())
                         raise ValueError
                 else:
                     for n in self.root.children:
-                        if datum.mol.is_subgraph_isomorphic(n.group, generate_initial_map=True, save_order=True):
+                        if datum.mol.has_same_labels(n.group,ignore_labels=self.r_label) and datum.mol.is_subgraph_isomorphic(n.group, save_order=True, check_labels=True):
                             break
                     else:
                         logging.info("Datum did not match Root node:")
@@ -711,8 +711,8 @@ class SubgraphIsomorphicDecisionTree:
 
         while children:
             for child in children:
-                if mol.is_subgraph_isomorphic(
-                    child.group, generate_initial_map=True, save_order=True
+                if mol.has_same_labels(child.group,ignore_labels=self.r_label) and mol.is_subgraph_isomorphic(
+                    child.group, save_order=True, check_labels=True
                 ):
                     children = child.children
                     node = child
@@ -738,7 +738,7 @@ class SubgraphIsomorphicDecisionTree:
 
     def check_subgraph_isomorphic(self):
         for node in self.nodes.values():
-            if (node.group is not None) and (node.parent is not None) and (node.parent.group is not None) and not node.group.is_subgraph_isomorphic(node.parent.group, generate_initial_map=True, save_order=True):
+            if (node.group is not None) and (node.parent is not None) and (node.parent.group is not None) and not node.group.is_subgraph_isomorphic(node.parent.group, save_order=True, check_labels=True):
                 raise ValueError(f"Tree is not subgraph isomorphic: {node.name} is not subgraph isomorphic to parent {node.parent.name}")
 
     def regularize(self, data=None, check_data=True):
@@ -1496,15 +1496,15 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         for d, v in self.mol_node_maps.items():
             for i, m in enumerate(v["mols"]):
                 nv = self.nodes["Root"]
-                assert m.is_subgraph_isomorphic(
-                    nv.group, generate_initial_map=True, save_order=True
+                assert m.has_same_labels(nv.group,ignore_labels=self.r_label) and m.is_subgraph_isomorphic(
+                    nv.group, save_order=True, check_labels=True
                 )
                 children = nv.children
                 boo = True
                 while boo:
                     for child in children:
-                        if m.is_subgraph_isomorphic(
-                            child.group, generate_initial_map=True, save_order=True
+                        if m.has_same_labels(child.group,ignore_labels=self.r_label) and m.is_subgraph_isomorphic(
+                            child.group, save_order=True, check_labels=True
                         ):
                             children = child.children
                             nv = child
@@ -1528,7 +1528,7 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                 for d in self.mol_node_maps[datum]["mols"]:
                     if self.root.group:
                         if not d.is_subgraph_isomorphic(
-                            self.root.group, generate_initial_map=True, save_order=True
+                            self.root.group, save_order=True, check_labels=True
                         ):
                             logging.error("Datum Submol did not match Root node:")
                             logging.error(d.to_adjacency_list())
@@ -1536,8 +1536,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
                     else:
                         for root_child in self.root.children:
                             try:
-                                if sorted([k if not isinstance(v,list) else k*len(v) for k,v in root_child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in d.get_all_labeled_atoms().items()]) and d.is_subgraph_isomorphic(
-                                    root_child.group, generate_initial_map=True, save_order=True
+                                if d.has_same_labels(root_child.group,ignore_labels=self.r_label) and d.is_subgraph_isomorphic(
+                                    root_child.group, save_order=True, check_labels=True
                                 ):
                                     break
                             except Exception as e:
@@ -1853,8 +1853,8 @@ class MultiEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDecisionTree):
         data_to_add = {child: [] for child in node.children}
         for m in node.items:
             for child in node.children:
-                if sorted([k if not isinstance(v,list) else k*len(v) for k,v in child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in m.get_all_labeled_atoms().items()]) and m.is_subgraph_isomorphic(
-                    child.group, generate_initial_map=True, save_order=True
+                if m.has_same_labels(child.group,ignore_labels=self.r_label) and m.is_subgraph_isomorphic(
+                    child.group, save_order=True, check_labels=True
                 ):
                     data_to_add[child].append(m)
                     break
@@ -1987,14 +1987,14 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
                 if any(d is x for x in new):
                     assert d.is_subgraph_isomorphic(
-                        node.group, generate_initial_map=True, save_order=True
+                        node.group, save_order=True, check_labels=True
                     )
                     self.mol_node_maps[datum]["nodes"][i] = node
 
         logging.info("adding node {}".format(name))
 
-        if grpc and all(st.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
-            assert grpc.is_subgraph_isomorphic(parent.group,generate_initial_map=True,save_order=True)
+        if grpc and all(st.is_subgraph_isomorphic(grpc,save_order=True,check_labels=True) for st in comp):
+            assert grpc.is_subgraph_isomorphic(parent.group,save_order=True,check_labels=True)
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
             cextname = ""
@@ -2021,7 +2021,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
                 for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
                     if any(d is x for x in comp):
                         if d.is_subgraph_isomorphic(
-                            nodec.group, generate_initial_map=True, save_order=True
+                            nodec.group, save_order=True, check_labels=True
                         ):
                             self.mol_node_maps[datum]["nodes"][i] = nodec
 
@@ -2095,8 +2095,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeRegressor(MultiEvalSubgraphIsomorph
             boo = True
             while boo:
                 for child in children:
-                    if child.group is None or sorted([k if not isinstance(v,list) else k*len(v) for k,v in child.group.get_all_labeled_atoms().items()]) == sorted([k if not isinstance(v,list) else k*len(v) for k,v in d.get_all_labeled_atoms().items()]) and d.is_subgraph_isomorphic(
-                        child.group,  save_order=True
+                    if child.group is None or d.has_same_labels(child.group,ignore_labels=self.r_label) and d.is_subgraph_isomorphic(
+                        child.group, save_order=True, check_labels=True
                     ):
                         children = child.children
                         node = child
@@ -2812,13 +2812,13 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
                 if any(d is x for x in new):
                     assert d.is_subgraph_isomorphic(
-                        node.group, generate_initial_map=True, save_order=True
+                        node.group, save_order=True, check_labels=True
                     )
                     self.mol_node_maps[datum]["nodes"][i] = node
 
         logging.info("adding node {}".format(name))
         
-        if grpc and all(st.is_subgraph_isomorphic(grpc,generate_initial_map=True,save_order=True) for st in comp):
+        if grpc and all(st.is_subgraph_isomorphic(grpc,save_order=True,check_labels=True) for st in comp):
             class_true = 0
             frags = name.split("_")
             frags[-1] = "N-" + frags[-1]
@@ -2844,7 +2844,7 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             for k, datum in enumerate(self.datums):
                 for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
                     if any(d is x for x in comp):
-                        assert d.is_subgraph_isomorphic(nodec.group, generate_initial_map=True, save_order=True), (d.to_adjacency_list(),nodec.group.to_adjacency_list())
+                        assert d.is_subgraph_isomorphic(nodec.group, save_order=True, check_labels=True), (d.to_adjacency_list(),nodec.group.to_adjacency_list())
                         self.mol_node_maps[datum]["nodes"][i] = nodec
             parent.items = []
         else:
@@ -2866,8 +2866,8 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
             boo = True
             while boo:
                 for child in children:
-                    if d.is_subgraph_isomorphic(
-                        child.group, generate_initial_map=True, save_order=True
+                    if d.has_same_labels(child.group,ignore_labels=self.r_label) and d.is_subgraph_isomorphic(
+                        child.group, save_order=True, check_labels=True
                     ):
                         children = child.children
                         node = child
@@ -3060,9 +3060,9 @@ class MultiEvalSubgraphIsomorphicDecisionTreeBinaryClassifier(MultiEvalSubgraphI
                         if seen_node:
                             for k, datum in enumerate(self.datums):
                                 for i, d in enumerate(self.mol_node_maps[datum]["mols"]):
-                                    if d.is_subgraph_isomorphic(node.group, generate_initial_map=True, save_order=True):
-                                        if all(not d.is_subgraph_isomorphic(c.group, generate_initial_map=True, save_order=True) for c in node.children):
-                                            if d.is_subgraph_isomorphic(child.group, generate_initial_map=True, save_order=True):
+                                    if d.has_same_labels(node.group) and d.is_subgraph_isomorphic(node.group, save_order=True, check_labels=True):
+                                        if all(not d.is_subgraph_isomorphic(c.group, save_order=True, check_labels=True) for c in node.children):
+                                            if d.is_subgraph_isomorphic(child.group, save_order=True, check_labels=True):
                                                 break_loop = True
                                                 break
                             if break_loop:

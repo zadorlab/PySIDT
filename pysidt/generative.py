@@ -567,7 +567,7 @@ def generate_structure(grp,
             raise ValueError("Invalid stage value")
         objective = target_function(struct, target_values, target_uncertainties)
         adjlist = struct.to_adjacency_list()
-        assert not grp.is_isomorphic(struct,save_order=True)
+        assert not grp.is_isomorphic(struct,save_order=True,check_labels=True)
         print(f"Selected extension: {typename}, {tup}, {adjlist}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
         if log_groups:
             logged_groups.append(struct)

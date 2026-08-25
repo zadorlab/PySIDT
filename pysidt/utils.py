@@ -7,14 +7,14 @@ except:
     from rmgpy.molecule import Molecule
 
 
-def data_matches_node(node, data):
+def data_matches_node(node, data, ignore_labels=[]):
     for datum in data:
         if isinstance(datum, Molecule):
             mol = datum
         else:
             mol = datum.mol
-        if not mol.is_subgraph_isomorphic(
-            node.group, generate_initial_map=True, save_order=True
+        if not mol.has_same_labels(node.group,ignore_labels=ignore_labels) or not mol.is_subgraph_isomorphic(
+            node.group, save_order=True, check_labels=True,
         ):
             return False
     else:
@@ -75,8 +75,8 @@ def evaluate_single(tree, mol, trace=False, estimate_uncertainty=False):
 
     while children:
         for child in children:
-            if mol.is_subgraph_isomorphic(
-                child.group, generate_initial_map=True, save_order=True
+            if mol.has_same_labels(child.group,ignore_labels=tree.r_label) and mol.is_subgraph_isomorphic(
+                child.group, save_order=True, check_labels=True
             ):
                 children = child.children
                 node = child

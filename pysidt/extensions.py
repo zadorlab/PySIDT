@@ -39,7 +39,7 @@ def split_mols(data, newgrp):
     if isinstance(data[0], Molecule):
         for i, mol in enumerate(data):
             if mol.is_subgraph_isomorphic(
-                newgrp, generate_initial_map=True, save_order=True
+                newgrp, save_order=True, check_labels=True,
             ):
                 new.append(mol)
             else:
@@ -47,7 +47,7 @@ def split_mols(data, newgrp):
     else:
         for i, datum in enumerate(data):
             if datum.mol.is_subgraph_isomorphic(
-                newgrp, generate_initial_map=True, save_order=True
+                newgrp, save_order=True, check_labels=True,
             ):
                 new.append(datum)
             else:
@@ -1431,10 +1431,10 @@ def get_molecular_extensions_for_generative_expansion(
             continue
         if enforce_bredts_rule and invalidated_by_bredts_rule(ext[0]):
             continue
-        if ext[0].is_isomorphic(mol,save_order=True,strict=False):
+        if ext[0].is_isomorphic(mol,save_order=True,strict=False,check_labels=True,):
             continue
         for uext in unique_extents:
-            if ext[0].is_isomorphic(uext[0],save_order=True,strict=False):
+            if ext[0].is_isomorphic(uext[0],save_order=True,strict=False,check_labels=True,):
                 break
         else:
             unique_extents.append(ext)
@@ -3835,13 +3835,13 @@ def generate_extensions_reverse(grp,structs):
             new_struct.remove_atom(at)
             new_struct.update()
             
-            if not new_struct.is_subgraph_isomorphic(grp, generate_initial_map=True, save_order=True): #removing that atom broke isomorphism with original group so don't delete that atom
+            if not new_struct.is_subgraph_isomorphic(grp, save_order=True, check_labels=True): #removing that atom broke isomorphism with original group so don't delete that atom
                 new_struct = old_struct
                 st_inds_to_not_remove.append(st_inds[ind])
                 continue
             else:
                 new,comp = split_mols(temp_structs, new_struct)
-                boos = np.array([item.is_subgraph_isomorphic(new_struct, generate_initial_map=True, save_order=True) for item in temp_structs])
+                boos = np.array([item.is_subgraph_isomorphic(new_struct, save_order=True, check_labels=True) for item in temp_structs])
                 if len(comp) == 0: #suddenly matches all groups...don't remove that atom
                     new_struct = old_struct
                     st_inds_to_not_remove.append(st_inds[ind])
@@ -3885,13 +3885,13 @@ def extend_structure_from_group_to_specific_group(struct,grp,grpspec,element_ato
     gen_structs = []
     
     if struct_to_node_isomorphisms is None:
-        struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
+        struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True,check_labels=True)
     struct_to_grp_index_isomorphisms = [{struct.atoms.index(a):grp.atoms.index(b) for a,b in iso.items()} for iso in struct_to_node_isomorphisms]
     node_to_struct_index_isomorphisms = [{grp.atoms.index(v):struct.atoms.index(k) for k,v in iso.items()} for iso in struct_to_node_isomorphisms]
     
     for i,struct_node_iso in enumerate(struct_to_grp_index_isomorphisms):
         node_struct_iso = node_to_struct_index_isomorphisms[i]
-        child_to_node_isomorphisms = grpspec.find_intersection_isomorphisms(grp,save_order=True)
+        child_to_node_isomorphisms = grpspec.find_intersection_isomorphisms(grp,save_order=True,check_labels=True)
         node_to_child_isomorphisms = [{v:k for k,v in d.items()} for d in child_to_node_isomorphisms]
         node_to_child_index_isomorphisms = [{grp.atoms.index(node_at):grpspec.atoms.index(child_at) for node_at,child_at in iso.items()} for iso in node_to_child_isomorphisms]
         for node_child_iso in node_to_child_index_isomorphisms:
@@ -3992,11 +3992,11 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
     gen_structs = []
     node_to_struct_index_isomorphism_record = []
     if struct_to_node_isomorphisms is None:
-        struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True)
+        struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(grp,save_order=True,check_labels=True)
         
     node_to_struct_index_isomorphisms = [{grp.atoms.index(v):struct.atoms.index(k) for k,v in iso.items()} for iso in struct_to_node_isomorphisms]
     
-    node_to_parent_isomorphisms = grp.find_subgraph_isomorphisms(grpgen,save_order=True)
+    node_to_parent_isomorphisms = grp.find_subgraph_isomorphisms(grpgen,save_order=True,check_labels=True)
     node_to_parent_index_isomorphisms = [{grp.atoms.index(a):grpgen.atoms.index(b) for a,b in iso.items()} for iso in node_to_parent_isomorphisms]
     
     for node_to_parent_index_isomorphism in node_to_parent_index_isomorphisms:
@@ -4019,7 +4019,7 @@ def extend_structure_from_group_to_general_group(struct,grp,grpgen,struct_to_nod
                         new_struct.vertices.insert(struct_index,newst_at)
                         for bd in gbds:
                             new_struct.add_bond(bd)
-                        if not new_struct.is_subgraph_isomorphic(grp,save_order=True):
+                        if not new_struct.is_subgraph_isomorphic(grp,save_order=True,check_labels=True): #if the new struct is not isomorphic to the node then this individual change is enough
                             gen_structs.append(new_struct)
                             node_to_struct_index_isomorphism_record.append(node_to_struct_index_isomorphism)
                         else: #otherwise this individual change is not enough due to isomorphic degeneracy...recurse
@@ -4113,7 +4113,7 @@ def generative_extensions_from_tree_node(decomp,node,element_atomtypes):
     delta = []
     delta_var = []
     
-    struct_to_node_isomorphisms = decomp.find_subgraph_isomorphisms(node.group,save_order=True)
+    struct_to_node_isomorphisms = decomp.find_subgraph_isomorphisms(node.group,save_order=True,check_labels=True)
     
     for child in node.children:
         out_structs = extend_structure_from_group_to_specific_group(decomp,node.group,child.group,element_atomtypes,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
@@ -4152,7 +4152,7 @@ def molecular_generative_extensions_from_tree_node(decomp,node,element_atomtypes
         struct = decomp.to_group()
     else:
         struct = decomp
-    struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(node.group,save_order=True)
+    struct_to_node_isomorphisms = struct.find_subgraph_isomorphisms(node.group,save_order=True,check_labels=True)
     
     for child in node.children:
         output_structs = extend_structure_from_group_to_specific_group(struct,node.group,child.group,element_atomtypes,struct_to_node_isomorphisms=struct_to_node_isomorphisms)
