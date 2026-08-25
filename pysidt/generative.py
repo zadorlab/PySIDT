@@ -640,6 +640,7 @@ def molecular_generate_structure(mol,
     structs = [struct]
     v,unc = tree.evaluate(struct,estimate_uncertainty=True)
     objectives = [target_function(struct,v,unc)]
+    target_value_list = [v]
     
     if optimize:
         while True:
@@ -677,6 +678,7 @@ def molecular_generate_structure(mol,
                 print(f"Selected extension: {typename}, {tup}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
                 structs.append(struct)
                 objectives.append(objective)
+                target_value_list.append(target_values)
                 iter += 1
             else:
                 return structs[-1],objectives[-1],structs,objectives
@@ -717,7 +719,8 @@ def molecular_generate_structure(mol,
             print(f"Selected extension: {typename}, {tup}, objective: {objective}, delta_v: {delta_v}, delta_var: {delta_var}, target_values: {target_values}, target_uncertainties: {target_uncertainties}")
             structs.append(struct)
             objectives.append(objective)
+            target_value_list.append(target_values)
     
     maxind = np.argmax(objectives)
     
-    return structs[maxind],objectives[maxind],structs,objectives
+    return structs[maxind],objectives[maxind],structs,objectives,target_value_list
