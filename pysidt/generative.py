@@ -339,7 +339,7 @@ def molecular_take_generative_step(mol,
             if index in exact_inds:
                 eind = exact_inds.tolist().index(index)
                 extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
-                return extents[index] + (ext_values[index], ext_uncertainties[index])
+                return extents[index] + (ext_values_exact[eind], ext_uncertainties_exact[eind])
             else:
                 new_target_values, new_target_uncertainties = tree.evaluate(extents[index][0], estimate_uncertainty=True)
                 new_target_delta = target_function(extents[index][0],new_target_values,new_target_uncertainties) - init_target
@@ -421,7 +421,7 @@ def molecular_take_generative_step(mol,
     if index in exact_inds:
         eind = exact_inds.tolist().index(index)
         extents[index] = extents[index][:-2] + (target_deltas_exact[eind], target_uncertainty_deltas_exact[eind])
-        return extents[index] + (new_target_values, new_target_uncertainties)
+        return extents[index] + (ext_values_exact[eind], ext_uncertainties_exact[eind])
     else:
         new_target_values, new_target_uncertainties = tree.evaluate(extents[index][0], estimate_uncertainty=True)
         new_target_delta = target_function(extents[index][0],new_target_values,new_target_uncertainties) - init_target
