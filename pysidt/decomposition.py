@@ -101,7 +101,7 @@ def adsorbate_site_decomposition(mol):
 def ring_decomposition(mol,cycles=None):
     out = []
     if cycles is None:
-        cycles = mol.get_deterministic_sssr()
+        cycles = mol.get_smallest_set_of_smallest_rings()
     for cycle in cycles:
         m = mol.copy(deep=True)
         for a in cycle:
@@ -112,7 +112,7 @@ def ring_decomposition(mol,cycles=None):
     return out
 
 def get_fused_cycle_sets(mol):
-    cycles = mol.get_deterministic_sssr()
+    cycles = mol.get_smallest_set_of_smallest_rings()
     cycle_sets = [set(cycle) for cycle in cycles]
     fused_cycle_indices = []
     for i,cset in enumerate(cycle_sets):

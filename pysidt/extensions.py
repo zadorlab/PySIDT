@@ -1439,10 +1439,6 @@ def get_molecular_extensions_for_generative_expansion(
         else:
             unique_extents.append(ext)
 
-    #There are multiple valid smallest set of smallest rings so when ring decompositions are involved it is best to 
-    #canonicalize our graphs by regenerating from canonicalized SMILES
-    unique_extents = [tuple([Molecule(smiles=ex[0].to_smiles())]+list(ex[1:])) for ex in unique_extents]
-
     ext_classes = np.unique([x[-4] for x in unique_extents])
     ext_class_dict = {ext_class:0 for ext_class in ext_classes}
     

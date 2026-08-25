@@ -53,7 +53,7 @@ def generate_bicyclic_groups(ring_size_max=9):
     return out
 
 def max_num_fused_cycles(mol):
-    cycles = mol.get_deterministic_sssr()
+    cycles = mol.get_smallest_set_of_smallest_rings()
     cycle_sets = [set(cycle) for cycle in cycles]
     fused_cycle_indices = []
     for i,cset in enumerate(cycle_sets):
