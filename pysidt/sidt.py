@@ -1185,13 +1185,13 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
         n = len(node_data)
         wsum = sum(d.weight for d in node.items)
         wsq_sum = sum(d.weight**2 for d in node.items)
-        if (wsum - wsq_sum/wsum) > 1e-3: 
-            data_mean = np.nansum(d.value * d.weight for d in node.items) / wsum
-            data_var = np.nansum(d.weight*(d.value - data_mean)**2 for d in node.items)/(wsum - wsq_sum/wsum)
+        if (wsum - wsq_sum/wsum) > 1e-3:
+            data_mean = np.nansum([d.value * d.weight for d in node.items], axis=0) / wsum
+            data_var = np.nansum([d.weight*(d.value - data_mean)**2 for d in node.items], axis=0)/(wsum - wsq_sum/wsum)
         else: #primarily if weights are all 1.0
-            data_mean = np.nanmean(node_data)
-            data_var = np.nanvar(node_data)
-        
+            data_mean = np.nanmean(node_data, axis=0)
+            data_var = np.nanvar(node_data, axis=0)
+
         if n == 1:
             node.rule = Rule(value=node_data[0], uncertainty=None, num_data=n)
         else:    
@@ -1206,7 +1206,7 @@ class MultiTargetSingleEvalSubgraphIsomorphicDecisionTree(SubgraphIsomorphicDeci
             node.rule.uncertainty = node.parent.rule.uncertainty
             
         #search up the tree to fill in NaN values
-        for i in range(len(n.rule)):
+        for i in range(len(n.rule.value)):
             n = node
             while np.isnan(n.rule.value[i]):
                 n = n.parent
